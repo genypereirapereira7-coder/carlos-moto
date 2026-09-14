@@ -1,0 +1,99 @@
+/**
+ * Service worker do PWA de Vendas.
+ *
+ * Só faz uma coisa: garantir que o app **abra** sem internet. Nada de API
+ * entra em cache — um `/motos/disponiveis` servido de cache seria a vitrine
+ * mentindo sobre o que ainda dá pra vender.
+ *
+ * Ao mexer nos arquivos do app, suba o VERSAO: é ele que descarta o cache
+ * antigo e evita o PWA congelado numa versão antiga.
+ */
+
+const VERSAO = "v1";
+const CACHE = `carlosmoto-vendas-${VERSAO}`;
+
+const CASCA = [
+  "./",
+  "./index.html",
+  "./app.js",
+  "./vendas.css",
+  "./manifest.json",
+  "../comum/api.js",
+  "../comum/formato.js",
+  "../comum/ws.js",
+  "../comum/estilo.css",
+];
+
+const CAMINHOS_API = ["/auth", "/motos", "/vendas", "/usuarios", "/relatorios", "/health", "/ws"];
+
+self.addEventListener("install", (evento) => {
+  evento.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(
+        CASCA.map((url) =>
+          cache.add(new Request(url, { cache: "reload" })).catch((erro) => {
+            console.warn("[sw] não cacheou", url, erro);
+          }),
+        ),
+      );
+      await self.skipWaiting();
+    })(),
+  );
+});
+
+self.addEventListener("activate", (evento) => {
+  evento.waitUntil(
+    (async () => {
+      for (const nome of await caches.keys()) {
+        if (nome.startsWith("carlosmoto-vendas-") && nome !== CACHE) {
+          await caches.delete(nome);
+        }
+      }
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener("fetch", (evento) => {
+  const { request } = evento;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (CAMINHOS_API.some((p) => url.pathname === p || url.pathname.startsWith(`${p}/`))) {
+    return;
+  }
+
+  if (request.mode === "navigate") {
+    evento.respondWith(
+      (async () => {
+        try {
+          const resposta = await fetch(request);
+          const cache = await caches.open(CACHE);
+          cache.put("./index.html", resposta.clone());
+          return resposta;
+        } catch {
+          return (await caches.match("./index.html")) ?? Response.error();
+        }
+      })(),
+    );
+    return;
+  }
+
+  evento.respondWith(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const guardado = await cache.match(request);
+
+      const daRede = fetch(request)
+        .then((resposta) => {
+          if (resposta.ok) cache.put(request, resposta.clone());
+          return resposta;
+        })
+        .catch(() => null);
+
+      return guardado ?? (await daRede) ?? Response.error();
+    })(),
+  );
+});

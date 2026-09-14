@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carlos Moto — Dono</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#151311" />
+  <link rel="icon" href="./icones/icone-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="./icones/apple-touch-icon.png" />
+  <link rel="stylesheet" href="../comum/estilo.css" />
+  <link rel="stylesheet" href="./dono.css" />
+</head>
+<body>
+  <div id="tela-login" class="tela-login">
+    <form id="form-login" class="cartao-login cartao">
+      <h1>Carlos Moto</h1>
+      <p class="fraco">Painel do dono</p>
+      <label class="campo">
+        Chave de acesso
+        <input id="login-chave" name="login-chave" class="campo-chave"
+               placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="one-time-code"
+               spellcheck="false" autocapitalize="characters" required />
+      </label>
+      <p class="fraco">
+        Só desta vez. Depois de conectar, este computador não pede mais nada.
+      </p>
+      <button class="botao" type="submit">Conectar este computador</button>
+    </form>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <nav class="lateral">
+      <div class="marca">
+        <span class="ponto" id="ponto-conexao" data-estado="offline"></span>
+        Carlos Moto
+      </div>
+      <button class="aba" data-tab="motos" type="button">Motos</button>
+      <button class="aba" data-tab="clientes" type="button">Clientes</button>
+      <button class="aba" data-tab="parcelas" type="button">Parcelas</button>
+      <button class="aba" data-tab="financeiro" type="button">Financeiro</button>
+      <button class="aba aba--fila" id="botao-fila" type="button" hidden>
+        <span id="fila-contador">0</span> esperando internet
+      </button>
+      <div class="lateral-rodape">
+        <button id="botao-instalar" class="botao botao--instalar" type="button" hidden>
+          Instalar no computador
+        </button>
+        <button id="botao-acesso" class="botao botao--fantasma" type="button">
+          Chave e aparelhos
+        </button>
+        <span id="usuario-nome" class="fraco"></span>
+        <button id="botao-sair" class="botao botao--fantasma" type="button">Sair</button>
+      </div>
+    </nav>
+    <div class="area">
+      <div id="faixa-offline" class="faixa-offline" hidden></div>
+      <main id="conteudo" class="conteudo"></main>
+    </div>
+  </div>
+
+  <div id="aviso" class="aviso" data-visivel="0"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

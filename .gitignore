@@ -1,0 +1,26 @@
+# --- ambiente local -------------------------------------------------------
+backend/.venv/
+backend/**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+
+# --- segredos -------------------------------------------------------------
+# O .env tem o segredo do JWT e a string de conexão do banco.
+.env
+.env.*
+!.env.exemplo
+
+# --- dados reais da loja --------------------------------------------------
+# NADA daqui pode ir pro GitHub: são as motos, os clientes, os CPFs, as
+# vendas e o hash da chave de acesso do Carlos. Os backups principalmente —
+# cada um é uma cópia inteira do banco.
+backend/_dev.db
+backend/_dev.db.backup-*
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/_dev.log
+backend/*.log

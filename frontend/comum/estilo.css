@@ -1,0 +1,226 @@
+/*
+ * Base visual dos PWAs da Carlos Moto.
+ *
+ * Isto é feito pra celular e só pra celular — a mesma regra do resto dos
+ * sistemas da casa: quem usa é uma pessoa em pé, com um aparelho na mão, no
+ * balcão ou no pátio. Aberto numa tela larga, o app trava numa coluna do
+ * tamanho de um celular em vez de esticar.
+ *
+ * Três regras guiam tudo aqui:
+ *   - Alvo de toque nunca abaixo de 48px.
+ *   - Contraste alto — o celular fica no pátio, no sol.
+ *   - A tela toda é a moldura do app: quem rola é uma área lá dentro, nunca a
+ *     página.
+ */
+
+:root {
+  --celular: 460px;
+
+  --laranja: #d9631e;
+  --laranja-claro: #f6d9c2;
+  --laranja-fundo: #fff6ef;
+  --grafite: #2b2b2e;
+  --tinta: #211d1a;
+  --tinta-fraca: #6f665e;
+  --linha: #e4ddd3;
+  --papel: #ffffff;
+  --fundo: #f5f1ea;
+  --verde: #1c8c5a;
+  --amarelo: #b8730a;
+  --amarelo-fundo: #fff4d9;
+  --vermelho: #c62c46;
+  --vermelho-fundo: #ffe9ed;
+
+  --raio: 14px;
+  --sombra: 0 2px 8px rgb(33 29 26 / 12%);
+  --alvo: 52px;
+
+  --seguro-baixo: env(safe-area-inset-bottom, 0px);
+  --seguro-topo: env(safe-area-inset-top, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--fundo);
+  color: var(--tinta);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (min-width: 520px) {
+  body {
+    width: var(--celular);
+    margin-inline: auto;
+    border-inline: 1px solid var(--linha);
+  }
+
+  .painel {
+    left: 50%;
+    right: auto;
+    width: var(--celular);
+    transform: translateX(-50%);
+  }
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------- tipos comuns */
+
+.botao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--alvo);
+  padding: 0 20px;
+  border-radius: var(--raio);
+  background: var(--laranja);
+  color: #fff;
+  font-weight: 700;
+  transition: transform 80ms ease, filter 80ms ease;
+}
+
+.botao:active {
+  transform: scale(0.98);
+  filter: brightness(0.94);
+}
+
+.botao:disabled {
+  background: var(--linha);
+  color: var(--tinta-fraca);
+  cursor: default;
+  transform: none;
+}
+
+.botao--fantasma {
+  background: var(--papel);
+  color: var(--tinta);
+  border: 1px solid var(--linha);
+}
+
+.botao--perigo {
+  background: var(--vermelho);
+}
+
+.cartao {
+  background: var(--papel);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+}
+
+.fraco {
+  color: var(--tinta-fraca);
+}
+
+/* ------------------------------------------------------------------- avisos */
+
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.faixa--atencao {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.faixa--erro {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  top: calc(12px + var(--seguro-topo));
+  z-index: 60;
+  transform: translate(-50%, -12px);
+  max-width: min(92vw, 420px);
+  padding: 14px 20px;
+  border-radius: var(--raio);
+  background: var(--tinta);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: var(--sombra);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.aviso[data-visivel="1"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.aviso[data-tipo="erro"] {
+  background: var(--vermelho);
+}
+
+.aviso[data-tipo="ok"] {
+  background: var(--verde);
+}
+
+/* ---------------------------------------------------------------- conexão */
+
+.ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--verde);
+  flex: none;
+}
+
+.ponto[data-estado="offline"] {
+  background: var(--amarelo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

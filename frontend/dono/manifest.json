@@ -1,0 +1,38 @@
+{
+  "name": "Carlos Moto Dono",
+  "short_name": "Carlos Moto",
+  "description": "Painel do dono: motos, clientes, parcelas e financeiro da Carlos Moto.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "/dono/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#151311",
+  "theme_color": "#151311",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": [
+    "business",
+    "finance"
+  ],
+  "icons": [
+    {
+      "src": "./icones/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icones/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icones/icone-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

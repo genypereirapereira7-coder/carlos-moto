@@ -1,0 +1,876 @@
+/*
+ * Painel do dono — diferente do app de Vendas, este é feito pra tela de
+ * computador: o dono senta no balcão com o painel aberto o dia inteiro, não
+ * segura um aparelho na mão. Por isso este arquivo desfaz a trava de largura
+ * de celular do `estilo.css` (que os dois PWAs importam) e usa menu lateral
+ * em vez de abas no rodapé.
+ */
+
+/*
+ * Modo escuro. O painel do dono é escuro sempre; os tokens de cor vêm do
+ * `estilo.css` (compartilhado com o app de vendas, que continua claro) e
+ * redefini-los aqui só vale pro painel. `color-scheme` faz o navegador
+ * desenhar no escuro também o que não é CSS nosso: o calendário do campo de
+ * data, a lista aberta de um select, a barra de rolagem.
+ */
+:root {
+  color-scheme: dark;
+
+  --grafite: #0f0e0c;
+  --tinta: #f1ebe3;
+  --tinta-fraca: #a59c91;
+  --linha: #36312b;
+  --papel: #1e1b18;
+  --fundo: #151311;
+  --laranja-claro: #6b3d22;
+  --laranja-fundo: #2b1e15;
+  --verde: #45c489;
+  --verde-fundo: #15301f;
+  --amarelo: #e6a93e;
+  --amarelo-fundo: #34280f;
+  --vermelho: #ff6f84;
+  --vermelho-fundo: #3b1a21;
+  --sombra: 0 2px 12px rgb(0 0 0 / 45%);
+}
+
+html {
+  background: var(--fundo);
+}
+
+html, body {
+  overflow: auto;
+}
+
+body {
+  width: auto;
+  margin-inline: 0;
+  border-inline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@media (min-width: 520px) {
+  body {
+    width: auto;
+    margin-inline: 0;
+    border-inline: none;
+  }
+}
+
+/* ------------------------------------------------------------------ login */
+
+.tela-login {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fundo);
+  padding: 24px;
+}
+
+.cartao-login {
+  width: min(360px, 100%);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cartao-login h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: var(--papel);
+  font-size: 15px;
+  color: var(--tinta);
+}
+
+.campo textarea {
+  padding: 10px 12px;
+  min-height: 72px;
+  resize: vertical;
+}
+
+.campo input.invalido,
+.campo select.invalido {
+  border-color: var(--vermelho);
+  background: var(--vermelho-fundo);
+}
+
+.erro-campo {
+  color: var(--vermelho);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------------- app */
+
+.app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100dvh;
+}
+
+.lateral {
+  background: var(--grafite);
+  border-right: 1px solid var(--linha);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  padding: 0 10px 18px;
+  font-size: 16px;
+}
+
+.aba {
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #e8e4de;
+  font-weight: 600;
+}
+
+.aba:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+.aba[data-ativa="1"] {
+  background: var(--laranja);
+  color: #fff;
+}
+
+.lateral-rodape {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+}
+
+.conteudo {
+  padding: 28px 32px;
+  max-width: 1100px;
+}
+
+.conteudo h2 {
+  margin: 0 0 18px;
+}
+
+/* ----------------------------------------------------------------- busca */
+
+.barra-busca {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.barra-busca input {
+  flex: 1;
+  min-width: 200px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  font-size: 15px;
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+/* ------------------------------------------------------------------ cartão */
+
+.cartao {
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.cartao h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.cartao h3.secao-seguinte {
+  margin-top: 20px;
+}
+
+.acoes-linha {
+  display: flex;
+  gap: 8px;
+}
+
+.linhas-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px 24px;
+}
+
+.linhas-dados dt {
+  font-size: 12px;
+  color: var(--tinta-fraca);
+  margin: 0 0 2px;
+}
+
+.linhas-dados dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.lucro-positivo { color: var(--verde); }
+.lucro-negativo { color: var(--vermelho); }
+
+/* ------------------------------------------------------------------ tabela */
+
+.tabela-wrap {
+  overflow-x: auto;
+  border-radius: var(--raio);
+  border: 1px solid var(--linha);
+}
+
+table.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--papel);
+  font-size: 14px;
+}
+
+table.tabela th,
+table.tabela td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--linha);
+  white-space: nowrap;
+}
+
+table.tabela th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--tinta-fraca);
+  background: var(--fundo);
+}
+
+table.tabela tbody tr {
+  cursor: pointer;
+}
+
+table.tabela tbody tr:hover {
+  background: var(--laranja-fundo);
+}
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.selo--disponivel { background: var(--verde-fundo); color: var(--verde); }
+.selo--vendida { background: var(--linha); color: var(--tinta-fraca); }
+.selo--devendo { background: var(--vermelho-fundo); color: var(--vermelho); }
+.selo--em-dia { background: var(--verde-fundo); color: var(--verde); }
+.selo--paga { background: var(--verde-fundo); color: var(--verde); }
+.selo--pendente { background: var(--amarelo-fundo); color: var(--amarelo); }
+.selo--atrasada { background: var(--vermelho-fundo); color: var(--vermelho); }
+
+.texto-devendo { color: var(--vermelho); font-weight: 700; }
+.texto-a-vencer { color: var(--amarelo); font-weight: 700; }
+
+/* ------------------------------------------------------ parcelas: resumo */
+
+.resumo-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.resumo-cartoes .cartao {
+  margin: 0;
+  padding: 16px 18px;
+}
+
+.resumo-rotulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+}
+
+.resumo-valor {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.resumo-detalhe {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--tinta-fraca);
+}
+
+.linha-acao {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.botao--pequeno {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.lista-simples {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------- abas internas */
+
+.abas-filtro {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.aba-filtro {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--linha);
+  background: var(--papel);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+}
+
+.aba-filtro:hover {
+  border-color: var(--laranja-claro);
+}
+
+.aba-filtro[data-ativa="1"] {
+  background: var(--laranja);
+  border-color: var(--laranja);
+  color: #fff;
+}
+
+.abas-filtro.secao-seguinte {
+  margin: 20px 0 14px;
+}
+
+/* ------------------------------------------------------------ histórico */
+
+.lista-historico {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item-historico {
+  padding: 14px 16px;
+  background: var(--fundo);
+  border-radius: var(--raio);
+}
+
+.item-historico h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.item-historico p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.sub-parcelas {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-parcelas li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  padding: 8px 12px;
+  background: var(--papel);
+  border-radius: 8px;
+}
+
+/* O complemento ao lado de um selo ("de R$ 15.000,00 a receber") é
+   explicação, não o dado — sem isto herdava o tamanho e o negrito do `dd` e
+   disputava atenção com o próprio selo. */
+.linhas-dados dd .fraco {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* -------------------------------------------------------------- despesas */
+
+.lista-despesas {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lista-despesas li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--fundo);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.form-linha {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.form-linha .campo {
+  flex: 1;
+  min-width: 140px;
+}
+
+/* --------------------------------------------------- venda: busca cliente */
+
+.link {
+  padding: 0;
+  color: var(--laranja);
+  font-weight: 700;
+  text-decoration: underline;
+  background: none;
+}
+
+.resultado-busca {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: -6px;
+}
+
+.resultado-item {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--linha);
+  background: var(--papel);
+  font-size: 15px;
+}
+
+.resultado-item:last-child { border-bottom: 0; }
+.resultado-item:hover { background: var(--laranja-fundo); }
+
+.resultado-vazio {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--papel);
+}
+
+.cliente-escolhido {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--laranja-fundo);
+  border: 1px solid var(--laranja-claro);
+}
+
+.bloco {
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 14px 16px;
+  margin: 4px 0 0;
+}
+
+.bloco legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tinta-fraca);
+}
+
+.previa {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--fundo);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* --------------------------------------------------------------- modal */
+
+.sobreposicao {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 62%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.modal {
+  width: min(560px, 100%);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-topo h3 {
+  margin: 0;
+}
+
+/* `minmax(0, 1fr)` e não `1fr`: `1fr` deixa a coluna crescer até caber a
+   opção mais comprida de um select — e "Fazer 250 — gerações antigas,
+   farol redondo" empurrava o formulário pra fora da janela. */
+.grade-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.acoes-modal {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+  .lateral {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .lateral-rodape { margin-top: 0; flex-direction: row; border: 0; }
+  .conteudo { padding: 20px; }
+  .grade-2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ------------------------------------------------------- modo escuro */
+
+/* O toast do `estilo.css` é "tinta" com texto branco: no escuro a tinta vira
+   clara e o texto sumiria. */
+.aviso {
+  background: #2d2925;
+  color: var(--tinta);
+  border: 1px solid var(--linha);
+}
+
+.aviso[data-tipo="ok"] {
+  background: var(--verde-fundo);
+  color: var(--verde);
+  border-color: var(--verde);
+}
+
+.aviso[data-tipo="erro"] {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+  border-color: var(--vermelho);
+}
+
+/* Cartão escuro sobre fundo escuro some sem uma borda: a sombra, que no claro
+   separa os dois, quase não aparece aqui. */
+.cartao {
+  border: 1px solid rgb(255 255 255 / 6%);
+}
+
+a {
+  color: #f39a61;
+}
+
+/* Texto branco sobre o laranja da marca dá 3.6:1 — abaixo dos 4.5:1 que
+   texto desse tamanho pede. Um laranja mais fechado resolve (4.8:1), mas só
+   onde o laranja é o fundo: como cor de texto sobre o fundo escuro (links,
+   "desfazer") o laranja claro é que lê melhor, então `--laranja` fica como
+   está e este é outro token. */
+:root {
+  --laranja-forte: #bd521a;
+}
+
+/* Os `:not` impedem que o botão fantasma (Editar, Cancelar, Sair) e o de
+   perigo virem laranja, e deixam o desabilitado com o cinza dele. */
+.botao:not(.botao--fantasma):not(.botao--perigo):not(:disabled),
+.aba[data-ativa="1"] {
+  background: var(--laranja-forte);
+}
+
+.aba-filtro[data-ativa="1"] {
+  background: var(--laranja-forte);
+  border-color: var(--laranja-forte);
+}
+
+/* --------------------------------------------------------- financeiro */
+
+.topo-financeiro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.topo-financeiro h2 {
+  margin: 0;
+}
+
+.seletor-mes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seletor-mes strong {
+  min-width: 180px;
+  text-align: center;
+  font-size: 16px;
+}
+
+.entrada { color: var(--verde); font-weight: 700; }
+.saida { color: var(--vermelho); font-weight: 700; }
+.aviso-cartao { color: var(--amarelo); }
+
+table.tabela tr.linha-dia-aberta td {
+  background: var(--laranja-fundo);
+}
+
+table.tabela tr.detalhe-dia td {
+  white-space: normal;
+  background: var(--fundo);
+  cursor: default;
+  padding: 14px 18px;
+}
+
+.lista-movimentos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lista-movimentos li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.lista-movimentos .selo {
+  min-width: 72px;
+  justify-content: center;
+}
+
+.lista-movimentos .descricao {
+  flex: 1;
+}
+
+.selo--venda,
+.selo--parcela { background: var(--verde-fundo); color: var(--verde); }
+.selo--compra { background: var(--vermelho-fundo); color: var(--vermelho); }
+.selo--gasto { background: var(--amarelo-fundo); color: var(--amarelo); }
+
+/* ----------------------------------------------------- fila offline */
+
+/* Fica escondido enquanto não há nada esperando: um contador zerado na
+   lateral o tempo todo vira paisagem, e aí o dia em que ele marca 3 passa
+   despercebido. */
+.aba--fila {
+  margin-top: 6px;
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+  font-size: 13px;
+}
+
+.aba--fila:hover {
+  background: var(--amarelo-fundo);
+  filter: brightness(1.25);
+}
+
+/* Recusado não sobe sozinho — precisa da mão do dono, então muda de cor. */
+.aba--fila[data-recusados="1"] {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.aba--fila span {
+  font-weight: 700;
+}
+
+.lista-fila {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.lista-fila li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--fundo);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.lista-fila li p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.botao--pequeno {
+  padding: 6px 10px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------- instalar app */
+
+/* Discreto de propósito: é uma ação que se faz uma vez na vida, e fica ao
+   lado do "Sair" no rodapé da lateral. */
+.botao--instalar {
+  background: transparent;
+  border: 1px solid var(--laranja);
+  color: var(--laranja);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.botao--instalar:hover:not(:disabled) {
+  background: var(--laranja-fundo);
+}
+
+.lista-ajuda {
+  margin: 12px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------- sem conexão (leitura) */
+
+/* A coluna da direita vira uma pilha: a faixa em cima, o conteúdo embaixo.
+   O `min-width: 0` impede que uma tabela larga estoure a grade. */
+.area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Fica o tempo todo enquanto durar a falta de conexão, e não some sozinha
+   como um toast: o dono precisa lembrar disso enquanto lê os números. */
+.faixa-offline {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+  border-bottom: 1px solid var(--amarelo);
+  padding: 10px 32px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------- chave de acesso */
+
+/* Espaçada e em maiúscula: quem digita está copiando de um bilhete, uma vez
+   na vida, e tem que enxergar cada caractere. */
+.campo-chave {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.chave-mostrada {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  letter-spacing: 3px;
+  text-align: center;
+  padding: 16px;
+  margin: 14px 0;
+  background: var(--laranja-fundo);
+  border: 1px dashed var(--laranja);
+  border-radius: 10px;
+  color: var(--texto);
+  user-select: all;
+}
