@@ -93,7 +93,7 @@ Copie o resultado e crie:
 > entrar como dono da loja. Guarde como você guardaria a chave do cofre — e
 > nunca coloque no GitHub.
 
-**Terceira variável — a sua chave de acesso (recomendado):**
+**Terceira variável — a sua chave de acesso:**
 
 - **Nome:** `CARLOSMOTO_CHAVE_DONO`
 - **Valor:** uma chave no formato `ABCD-EFGH-JKMN-PQRS`
@@ -104,9 +104,19 @@ Gere uma boa assim:
 cd backend && .venv/bin/python -c "from app.seguranca import gerar_chave; print(gerar_chave())"
 ```
 
-Não é obrigatório: sem ela o sistema sorteia uma e mostra no log. Mas vale a
-pena — com ela cadastrada, a chave fica guardada no painel da Railway e você
-sempre pode ir lá olhar. Sem ela, se você perder o log, fica de fora.
+**Esta variável manda.** Enquanto ela tiver valor, a chave do dono é aquela —
+vale pra conta que está nascendo agora e também pra uma que já exista. Coloque
+a chave que você quiser usar e é essa que vai abrir o sistema.
+
+Pode colar com traço ou sem, em maiúscula ou minúscula: o sistema entende.
+
+Tecnicamente é opcional — sem ela o sistema sorteia uma e mostra no log. Mas
+preencha: assim a chave fica guardada no painel da Railway e você pode ir lá
+olhar quando esquecer. Sem ela, se perder o log, fica de fora.
+
+> **O preço disso:** se um dia você trocar a chave pela tela do sistema
+> (botão *Chave e aparelhos*), o próximo deploy devolve a da variável. Trocou
+> pela tela? Atualize a variável também, ou apague ela.
 
 ---
 
@@ -210,15 +220,15 @@ A URL pública está em Postgres → **Variables** → `DATABASE_PUBLIC_URL`.
 
 ## Quando der problema
 
-### Perdi a chave de acesso e não consigo entrar
+### "Chave de acesso inválida", e eu tenho certeza que é essa
 
-Tem volta. Em **Variables**, no serviço do sistema:
+Em **Variables**, no serviço do sistema, ponha a chave que você quer em
+`CARLOSMOTO_CHAVE_DONO` e espere subir. Pronto — é essa que passa a valer,
+mesmo que a conta já existisse com outra.
 
-1. `CARLOSMOTO_CHAVE_DONO` = a chave nova que você quer
-2. `CARLOSMOTO_REDEFINIR_CHAVE` = `1`
-3. Espere subir, entre com a chave nova
-4. **Apague a `CARLOSMOTO_REDEFINIR_CHAVE`** — enquanto ela existir, toda
-   subida troca a chave de novo
+O log confirma, em letras grandes: **CHAVE TROCADA PELA VARIAVEL**. Se em vez
+disso ele disser *"a chave ja e a da variavel"*, então a chave está certa e o
+problema é outro — me chame.
 
 Trocar a chave **não desconecta** os aparelhos que já estão pareados. Pra tirar
 um aparelho do ar, use o botão **Chave e aparelhos** dentro do sistema.

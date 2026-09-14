@@ -78,12 +78,23 @@ def conferir_ambiente() -> None:
         raise SystemExit(1)
 
 
-# O arquivo se chama `producao.py`: ligar o modo de produção é a razão dele
-# existir, não uma coisa pra lembrar de configurar. Isto acende as travas de
-# uma vez — documentação fechada, HSTS, e a recusa de subir com o segredo de
-# desenvolvimento (`app/config.py`).
-conferir_ambiente()
-os.environ.setdefault("CARLOSMOTO_AMBIENTE", "producao")
+def ligar_modo_producao() -> None:
+    """Confere a configuração e acende as travas de produção.
+
+    Precisa rodar **antes** de qualquer `import app.*`: a configuração é lida
+    e guardada no primeiro import, e depois disso mudar a variável não muda
+    mais nada. Como este módulo só importa `os`, `sys` e `asyncio` lá em
+    cima, chamar isto no começo do `main()` chega a tempo.
+
+    Ficava solto no topo do arquivo, e aí *importar* `producao` já derrubava o
+    processo inteiro com `SystemExit` quando faltava uma variável — o que
+    tornava impossível testar qualquer coisa daqui. Import não pode ter esse
+    poder; quem decide encerrar é quem manda rodar.
+    """
+    conferir_ambiente()
+    # O arquivo se chama `producao.py`: ligar o modo de produção é a razão
+    # dele existir, não uma coisa pra lembrar de configurar.
+    os.environ.setdefault("CARLOSMOTO_AMBIENTE", "producao")
 
 
 # ------------------------------------------------------------------ preparo
@@ -136,21 +147,35 @@ def _endereco_do_banco() -> str:
 
 
 async def _garantir_dono() -> None:
-    """Cria o dono se ele ainda não existe, e mostra a chave dele uma vez.
+    """Deixa o acesso do dono batendo com o que foi pedido, e diz qual é.
 
-    A chave só existe em claro neste instante: o banco guarda o hash dela. Se
-    o recado passar batido no log, o caminho de volta é o `CARLOSMOTO_CHAVE_DONO`
-    junto com `CARLOSMOTO_REDEFINIR_CHAVE=1` — ver DEPLOY.md.
+    **`CARLOSMOTO_CHAVE_DONO` manda.** Se essa variável tem valor, a chave do
+    dono passa a ser aquela — na conta que está sendo criada agora e também
+    na que já existia. Uma variável, um efeito, do jeito que a pessoa pensa
+    nela: "a chave é essa".
+
+    Antes era preciso combinar duas variáveis pra trocar uma chave já criada,
+    e quem só preenchia a `CHAVE_DONO` levava "Chave de acesso inválida" sem
+    nenhuma pista do porquê — a variável estava certa, cadastrada, e ignorada
+    em silêncio. Isso era uma armadilha, não uma trava de segurança.
+
+    **O preço, que é real:** trocar a chave pela tela do sistema não sobrevive
+    ao próximo deploy se essa variável continuar preenchida — ela volta a
+    valer. Trocou pela tela? Atualize a variável, ou apague ela.
+
+    Sem a variável, nada disso acontece: a chave que está no banco fica como
+    está, e uma conta nova nasce com uma chave sorteada aqui.
     """
     from sqlalchemy import select
 
     from app.config import get_config
     from app.db import Sessao
     from app.models.usuario import Papel, Usuario
-    from app.seguranca import gerar_chave, hash_chave
+    from app.seguranca import gerar_chave, hash_chave, normalizar_chave
 
     cfg = get_config()
-    redefinir = os.environ.get("CARLOSMOTO_REDEFINIR_CHAVE", "").strip().lower() in {
+    pedida = normalizar_chave(cfg.chave_dono) if cfg.chave_dono else ""
+    forcar_nova = os.environ.get("CARLOSMOTO_REDEFINIR_CHAVE", "").strip().lower() in {
         "1", "true", "sim", "yes",
     }
 
@@ -159,6 +184,7 @@ async def _garantir_dono() -> None:
             await sessao.execute(select(Usuario).where(Usuario.papel == Papel.DONO))
         ).scalars().first()
 
+        # ------------------------------------------------- conta ainda não existe
         if dono is None:
             chave = cfg.chave_dono or gerar_chave()
             sessao.add(
@@ -168,17 +194,37 @@ async def _garantir_dono() -> None:
             _anunciar_chave("Carlos", chave, "CONTA DO DONO CRIADA AGORA")
             return
 
-        if redefinir:
-            # Caminho de emergência: o dono perdeu a chave e não consegue
-            # entrar. Trocar o hash não derruba aparelho nenhum que já esteja
-            # pareado — quem faz isso é a tela de sessões.
-            chave = cfg.chave_dono or gerar_chave()
+        # ------------------------------------------------- a variável manda
+        if pedida:
+            if dono.chave_hash == hash_chave(pedida):
+                # Já é essa. Nada a fazer, e nada a gravar — uma escrita à toa
+                # viraria uma linha no histórico a cada subida do servidor.
+                print(
+                    f"dono: {dono.nome} — a chave ja e a da variavel CARLOSMOTO_CHAVE_DONO",
+                    flush=True,
+                )
+                return
+
+            dono.chave_hash = hash_chave(pedida)
+            await sessao.commit()
+            _anunciar_chave(
+                dono.nome, cfg.chave_dono, "CHAVE TROCADA PELA VARIAVEL",
+                "A chave anterior nao vale mais.",
+                "",
+                "Nenhum aparelho ja pareado foi desconectado — quem faz isso e",
+                "o botao 'Chave e aparelhos', dentro do sistema.",
+            )
+            return
+
+        # --------------------------- sem variável: sortear uma, se pedirem
+        if forcar_nova:
+            chave = gerar_chave()
             dono.chave_hash = hash_chave(chave)
             await sessao.commit()
             _anunciar_chave(
-                dono.nome, chave, "CHAVE REDEFINIDA A PEDIDO",
+                dono.nome, chave, "CHAVE NOVA SORTEADA A PEDIDO",
                 "Apague a variavel CARLOSMOTO_REDEFINIR_CHAVE agora: enquanto",
-                "ela existir, toda subida do servidor troca a chave de novo.",
+                "ela existir, toda subida do servidor sorteia outra.",
             )
             return
 
@@ -231,6 +277,8 @@ def _porta() -> tuple[int, bool]:
 
 
 def main() -> None:
+    ligar_modo_producao()
+
     porta, veio_da_hospedagem = _porta()
 
     if not veio_da_hospedagem:

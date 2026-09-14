@@ -146,3 +146,108 @@ def test_o_app_de_verdade_segue_a_regra_do_ambiente():
         assert app.main.app.openapi_url is None
     else:
         assert app.main.app.openapi_url == "/openapi.json"
+
+
+# ------------------------------------------- a chave do dono na hospedagem
+
+async def _dono_de(sessao):
+    from sqlalchemy import select
+
+    from app.models.usuario import Papel, Usuario
+
+    return (
+        await sessao.execute(select(Usuario).where(Usuario.papel == Papel.DONO))
+    ).scalars().first()
+
+
+async def _rodar_garantir_dono(engine, monkeypatch, chave_dono="", redefinir=False):
+    """Roda o `_garantir_dono` do arranque contra o banco de teste."""
+    import sys
+    from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    raiz = Path(__file__).resolve().parent.parent
+    if str(raiz) not in sys.path:
+        sys.path.insert(0, str(raiz))
+
+    import app.config
+    import app.db
+
+    monkeypatch.setattr(app.db, "Sessao", async_sessionmaker(engine, expire_on_commit=False))
+
+    cfg = app.config.get_config()
+    monkeypatch.setattr(cfg, "chave_dono", chave_dono)
+    monkeypatch.setattr(app.config, "get_config", lambda: cfg)
+
+    monkeypatch.setenv("CARLOSMOTO_REDEFINIR_CHAVE", "1" if redefinir else "")
+
+    import producao
+
+    await producao._garantir_dono()
+
+
+async def test_a_variavel_da_chave_vale_pra_conta_que_ja_existe(engine, dados, monkeypatch):
+    """O que travou o deploy de verdade.
+
+    O dono já tinha nascido com uma chave sorteada. Preencher a
+    `CARLOSMOTO_CHAVE_DONO` com outra não mudava nada — e a tela respondia
+    "Chave de acesso inválida" com a variável certa, cadastrada e ignorada em
+    silêncio. Uma variável que não faz o que diz é pior que variável nenhuma.
+    """
+    from app.seguranca import hash_chave
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    nova = "39S7-D88Q-W4HC-GYFE"
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono=nova)
+
+    fabrica = async_sessionmaker(engine, expire_on_commit=False)
+    async with fabrica() as s:
+        dono = await _dono_de(s)
+        assert dono.chave_hash == hash_chave(nova)
+
+
+async def test_a_variavel_aceita_a_chave_digitada_torta(engine, dados, monkeypatch):
+    """Quem cola a chave no painel pode colar sem traço ou em minúscula."""
+    from app.seguranca import hash_chave
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono="  39s7 d88q w4hc gyfe ")
+
+    fabrica = async_sessionmaker(engine, expire_on_commit=False)
+    async with fabrica() as s:
+        dono = await _dono_de(s)
+        assert dono.chave_hash == hash_chave("39S7-D88Q-W4HC-GYFE")
+
+
+async def test_subir_de_novo_com_a_mesma_variavel_nao_mexe_em_nada(engine, dados, monkeypatch):
+    """Senão cada deploy gravaria uma linha de histórico à toa — e, pior, a
+    chave "trocaria" pela mesma, poluindo o log com um alarme falso."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    nova = "39S7-D88Q-W4HC-GYFE"
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono=nova)
+
+    fabrica = async_sessionmaker(engine, expire_on_commit=False)
+    async with fabrica() as s:
+        antes = (await _dono_de(s)).chave_hash
+
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono=nova)
+
+    async with fabrica() as s:
+        assert (await _dono_de(s)).chave_hash == antes
+
+
+async def test_sem_a_variavel_a_chave_do_banco_fica_como_esta(engine, dados, monkeypatch):
+    """A variável em branco não pode mexer em nada — quem trocou a chave pela
+    tela do sistema não pode perdê-la no próximo deploy."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    fabrica = async_sessionmaker(engine, expire_on_commit=False)
+    async with fabrica() as s:
+        antes = (await _dono_de(s)).chave_hash
+
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono="")
+
+    async with fabrica() as s:
+        assert (await _dono_de(s)).chave_hash == antes
