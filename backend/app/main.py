@@ -198,3 +198,36 @@ for _nome in ("vendas", "dono"):
         app.mount(f"/{_nome}", StaticFiles(directory=_pasta, html=True), name=_nome)
 if (_frontend / "comum").is_dir():
     app.mount("/comum", StaticFiles(directory=_frontend / "comum"), name="comum")
+
+
+# ---------------------------------------------------------------- rodar direto
+
+if __name__ == "__main__":
+    """`python backend/app/main.py` — sobe o sistema igual ao `producao.py`.
+
+    Este arquivo **define** a aplicação; quem a coloca no ar é o
+    `backend/producao.py`. A confusão é fácil de fazer: num projeto Python é
+    quase sempre o `main.py` que se manda rodar, e apontar a hospedagem pra
+    cá parece a coisa óbvia.
+
+    Só que rodar este arquivo sem esta parte não subia servidor nenhum: o
+    módulo era importado, o objeto `app` criado, e o processo terminava em
+    silêncio — deploy verde, log limpo, e a página respondendo
+    "Application failed to respond". Um jeito bem ruim de falhar.
+
+    Em vez de deixar essa armadilha aberta, este atalho leva pro caminho
+    certo: mesma preparação de banco, mesma porta da hospedagem, mesmas
+    travas de produção.
+    """
+    import sys
+    from pathlib import Path as _Caminho
+
+    # `python backend/app/main.py` deixa `backend/app` no caminho de import,
+    # não `backend` — sem isto, `import producao` não acha nada.
+    _BACKEND = _Caminho(__file__).resolve().parent.parent
+    if str(_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_BACKEND))
+
+    import producao
+
+    sys.exit(producao.main())

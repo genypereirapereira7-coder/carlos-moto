@@ -202,8 +202,52 @@ def _anunciar_chave(nome: str, chave: str, titulo: str, *extra: str) -> None:
 
 # ------------------------------------------------------------------ servidor
 
+# Todas as interfaces, e não `127.0.0.1`. Dentro de um contêiner, `localhost`
+# quer dizer "só eu mesmo": o servidor sobe, o log diz que está no ar, e o
+# proxy da hospedagem bate numa porta que não responde a ninguém de fora. É a
+# causa clássica de "Application failed to respond" com o deploy verde.
+_HOST = "0.0.0.0"
+
+
+def _porta() -> tuple[int, bool]:
+    """A porta, e se ela veio da hospedagem ou é chute nosso.
+
+    Quem escolhe a porta é a hospedagem, e ela manda em `PORT` — não se
+    adapta a quem escolher sozinho. Saber a diferença é o que permite avisar,
+    em vez de subir calado na porta errada.
+    """
+    bruta = (os.environ.get("PORT") or "").strip()
+    if not bruta:
+        return 8000, False
+    try:
+        return int(bruta), True
+    except ValueError:
+        _falar(
+            "PORT VEIO COM UM VALOR ESTRANHO",
+            f"PORT = {bruta!r}, que nao e um numero.",
+            "Subindo na 8000. Confira a variavel no painel.",
+        )
+        return 8000, False
+
+
 def main() -> None:
-    porta = int(os.environ.get("PORT") or 8000)
+    porta, veio_da_hospedagem = _porta()
+
+    if not veio_da_hospedagem:
+        # Este é o motivo número um do "Application failed to respond": o
+        # contêiner sobe, o servidor escuta, e escuta na porta errada. A
+        # hospedagem tenta falar numa porta onde não tem ninguém.
+        _falar(
+            "ATENCAO: A VARIAVEL PORT NAO VEIO",
+            f"Subindo na porta {porta}, que e o padrao — um chute.",
+            "",
+            "A hospedagem normalmente injeta PORT sozinha e espera o servidor",
+            "atender exatamente nela. Se a pagina publica der",
+            "'Application failed to respond', e quase certo que e isto.",
+            "",
+            "Na Railway: Settings > Networking > no dominio gerado, confira",
+            "o Target Port — ele tem que bater com a porta acima.",
+        )
 
     asyncio.run(preparar())
 
@@ -222,10 +266,23 @@ def main() -> None:
 
     import uvicorn
 
-    print(f"servidor: 0.0.0.0:{porta}", flush=True)
+    # Este bloco existe pro log responder sozinho à pergunta "por que a
+    # página não abre". Sem ele, o log diz "Application startup complete" e
+    # cala justamente sobre onde o servidor foi parar.
+    _falar(
+        "SERVIDOR NO AR",
+        f"porta:     {porta}"
+        f"  ({'veio da hospedagem' if veio_da_hospedagem else 'PADRAO — a hospedagem nao mandou'})",
+        f"interface: {_HOST} (todas) — alcancavel de fora do conteiner",
+        f"ambiente:  {os.environ.get('CARLOSMOTO_AMBIENTE')}",
+        "",
+        "Se a pagina publica ainda der 'Application failed to respond', o",
+        "problema nao esta aqui dentro: e o Target Port do dominio, ou um",
+        "Start Command no painel passando por cima do railway.json.",
+    )
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host=_HOST,
         port=porta,
         workers=1,
         # A hospedagem fica na frente como proxy reverso. Sem isto, todo
