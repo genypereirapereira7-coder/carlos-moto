@@ -1,9 +1,12 @@
 /*
- * Painel do dono — diferente do app de Vendas, este é feito pra tela de
- * computador: o dono senta no balcão com o painel aberto o dia inteiro, não
- * segura um aparelho na mão. Por isso este arquivo desfaz a trava de largura
- * de celular do `estilo.css` (que os dois PWAs importam) e usa menu lateral
- * em vez de abas no rodapé.
+ * Painel do dono — no computador e no celular.
+ *
+ * No computador: menu lateral e tabelas, pra quem senta no balcão com o
+ * painel aberto o dia inteiro. No celular (seção "celular", no fim do
+ * arquivo): as abas descem pra perto do polegar, as tabelas viram cartões e
+ * os formulários sobem de baixo. Este arquivo desfaz a trava de largura de
+ * celular do `estilo.css`, que os dois PWAs importam: aqui quem decide o
+ * layout é a largura da tela, não uma coluna fixa.
  */
 
 /*
@@ -158,8 +161,12 @@ body {
   font-weight: 600;
 }
 
-.aba:hover {
-  background: rgb(255 255 255 / 8%);
+/* Só onde existe mouse. No toque o `:hover` gruda no último item tocado, e ele
+   fica parecendo selecionado até tocar em outro lugar. */
+@media (hover: hover) {
+  .aba:hover {
+    background: rgb(255 255 255 / 8%);
+  }
 }
 
 .aba[data-ativa="1"] {
@@ -283,8 +290,10 @@ table.tabela tbody tr {
   cursor: pointer;
 }
 
-table.tabela tbody tr:hover {
-  background: var(--laranja-fundo);
+@media (hover: hover) {
+  table.tabela tbody tr:hover {
+    background: var(--laranja-fundo);
+  }
 }
 
 .selo {
@@ -510,7 +519,9 @@ table.tabela tbody tr:hover {
 }
 
 .resultado-item:last-child { border-bottom: 0; }
-.resultado-item:hover { background: var(--laranja-fundo); }
+@media (hover: hover) {
+  .resultado-item:hover { background: var(--laranja-fundo); }
+}
 
 .resultado-vazio {
   margin: 0;
@@ -600,19 +611,7 @@ table.tabela tbody tr:hover {
   margin-top: 6px;
 }
 
-@media (max-width: 720px) {
-  .app { grid-template-columns: 1fr; }
-  .lateral {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .lateral-rodape { margin-top: 0; flex-direction: row; border: 0; }
-  .conteudo { padding: 20px; }
-  .grade-2 { grid-template-columns: minmax(0, 1fr); }
-}
+/* O layout de celular fica no fim do arquivo — ver a seção "celular". */
 
 /* ------------------------------------------------------- modo escuro */
 
@@ -657,7 +656,7 @@ a {
 
 /* Os `:not` impedem que o botão fantasma (Editar, Cancelar, Sair) e o de
    perigo virem laranja, e deixam o desabilitado com o cinza dele. */
-.botao:not(.botao--fantasma):not(.botao--perigo):not(:disabled),
+.botao:not(.botao--fantasma):not(.botao--perigo):not(.botao--instalar):not(:disabled),
 .aba[data-ativa="1"] {
   background: var(--laranja-forte);
 }
@@ -762,7 +761,7 @@ table.tabela tr.detalhe-dia td {
   color: var(--vermelho);
 }
 
-.aba--fila span {
+.aba--fila #fila-contador {
   font-weight: 700;
 }
 
@@ -806,7 +805,11 @@ table.tabela tr.detalhe-dia td {
 /* -------------------------------------------------------- instalar app */
 
 /* Discreto de propósito: é uma ação que se faz uma vez na vida, e fica ao
-   lado do "Sair" no rodapé da lateral. */
+   lado do "Sair" no rodapé da lateral.
+
+   Estava ilegível — texto laranja sobre fundo laranja. A regra que pinta de
+   laranja todo botão principal (no "modo escuro", acima) pegava este também,
+   e ganhava por ser mais específica. Agora ela o deixa de fora. */
 .botao--instalar {
   background: transparent;
   border: 1px solid var(--laranja);
@@ -873,4 +876,671 @@ table.tabela tr.detalhe-dia td {
   border-radius: 10px;
   color: var(--texto);
   user-select: all;
+}
+
+/* ------------------------------------------ peças do celular e da instalação */
+
+/* No computador as abas continuam uma coluna na lateral, como sempre foram. */
+.abas-principais {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Existem só no celular — no computador ficam fora da tela. */
+.aba-icone,
+.botao-mais,
+.fundo-menu {
+  display: none;
+}
+
+/* Convite pra instalar. Quem decide se aparece é o `app.js` (só em celular),
+   então o estilo não depende da largura: celular deitado passa dos 720px. */
+.convite-instalar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 10px 4px 10px 12px;
+  background: var(--laranja-fundo);
+  border: 1px solid var(--laranja-claro);
+  border-radius: 14px;
+}
+
+.convite-instalar img {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.convite-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  color: var(--tinta-fraca);
+}
+
+.convite-texto strong {
+  font-size: 14px;
+  color: var(--tinta);
+}
+
+.convite-instalar .botao {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.convite-fechar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--tinta-fraca);
+}
+
+.aba--fila .fila-texto {
+  font-weight: inherit;
+}
+
+.cartao-login .botao--instalar {
+  min-height: 48px;
+  font-size: 15px;
+}
+
+.dica-instalar {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Passo a passo numerado das instruções de instalação. */
+.passos-instalar {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: passo;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.passos-instalar li {
+  counter-increment: passo;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.passos-instalar li::before {
+  content: counter(passo);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--laranja-forte);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* O ícone de compartilhar desenhado no meio da frase, azul como no Safari —
+   é por essa cor e esse formato que o dono vai procurar o botão. */
+.icone-inline {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -4px;
+  color: #4da3ff;
+}
+
+/* 16px em todo campo de tela de toque. Abaixo disso o iPhone dá zoom sozinho
+   quando o campo recebe o toque, e a tela fica ampliada e torta até o dono
+   descobrir que precisa beliscar pra voltar. Vale pelo tipo de tela — um iPad
+   deitado tem 1180px e dá o mesmo zoom — e também pela largura, porque nem
+   todo navegador diz que o dedo é o ponteiro. */
+@media (pointer: coarse), (max-width: 720px) {
+  .campo input,
+  .campo select,
+  .campo textarea,
+  .barra-busca input {
+    font-size: 16px;
+  }
+}
+
+/* ================================================================= celular */
+
+/*
+ * O mesmo painel, numa tela de celular.
+ *
+ * Fica no fim do arquivo de propósito. Uma regra de celular escrita no meio
+ * perde pra qualquer regra de mesmo peso declarada depois — e era assim que
+ * a faixa de "sem conexão" continuava com 32px de margem numa tela de 390, e
+ * que o rodapé da lateral (quatro botões numa linha que não quebrava) forçava
+ * a página inteira a 411px, cortando todo cartão na borda direita.
+ */
+@media (max-width: 720px) {
+  :root {
+    --barra-abas: 64px;
+  }
+
+  /* Quem rola é o documento, não o `body` numa caixa de 100dvh como no
+     computador. É o que deixa o iPhone recolher a barra do Safari ao rolar. */
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  /* `minmax(0, 1fr)` e não `1fr`: com `1fr` a coluna cresce até caber o filho
+     mais largo que não quebra — foi o que empurrou a página pra 411px. */
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* ---------------------------------------------------- barra do topo */
+
+  .lateral {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: calc(6px + var(--seguro-topo)) 6px 6px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--linha);
+  }
+
+  .marca {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .marca-nome {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .aba--fila {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .botao-mais {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    color: var(--tinta);
+  }
+
+  .botao-mais svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .botao-mais[aria-expanded="true"] {
+    background: rgb(255 255 255 / 10%);
+  }
+
+  /* ------------------------------------------------------ abas, embaixo */
+
+  /* Embaixo, onde o polegar alcança com o celular numa mão só. As quatro
+     sempre à vista: trocar de aba é o que mais se faz no dia. */
+  .abas-principais {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px 6px calc(6px + var(--seguro-baixo));
+    background: var(--grafite);
+    border-top: 1px solid var(--linha);
+  }
+
+  .abas-principais .aba {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 52px;
+    padding: 4px 2px;
+    border-radius: 12px;
+    font-size: 12px;
+    text-align: center;
+    color: var(--tinta-fraca);
+  }
+
+  .aba-icone {
+    display: block;
+    width: 56px;
+    height: 30px;
+    padding: 3px 16px;
+    border-radius: 999px;
+  }
+
+  /* A aba aberta não pinta o botão inteiro de laranja, como na lateral: numa
+     barra de quatro, o bloco laranja pesava mais que o conteúdo. Só a pílula
+     atrás do ícone. */
+  .abas-principais .aba[data-ativa="1"] {
+    background: transparent;
+    color: var(--tinta);
+  }
+
+  .abas-principais .aba[data-ativa="1"] .aba-icone {
+    background: var(--laranja-forte);
+    color: #fff;
+  }
+
+  /* ---------------------------------------------------------- menu Mais */
+
+  .fundo-menu {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgb(0 0 0 / 50%);
+  }
+
+  .lateral-rodape {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(var(--barra-abas) + var(--seguro-baixo) + 8px);
+    z-index: 40;
+    margin: 0;
+    padding: 14px;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--papel);
+    border: 1px solid var(--linha);
+    border-radius: 16px;
+    box-shadow: var(--sombra);
+    opacity: 0;
+    transform: translateY(12px);
+    visibility: hidden;
+    transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+  }
+
+  .lateral[data-menu="aberto"] .lateral-rodape {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+
+  .lateral-rodape .fraco {
+    order: -1;
+    padding: 0 4px 4px;
+    font-size: 13px;
+  }
+
+  .lateral-rodape .botao {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  /* ----------------------------------------------------------- conteúdo */
+
+  .conteudo {
+    padding: 16px 16px calc(var(--barra-abas) + var(--seguro-baixo) + 24px);
+  }
+
+  .conteudo h2 {
+    margin-bottom: 14px;
+    font-size: 22px;
+  }
+
+  .faixa-offline {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .cartao {
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .barra-busca {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .barra-busca input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .barra-busca .botao {
+    flex: 1 1 0;
+    padding: 0 12px;
+  }
+
+  .modal-topo {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .modal-topo h3 {
+    flex: 1 1 160px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Botões e filtros descem pra uma linha só deles, embaixo do título. */
+  .modal-topo .acoes-linha,
+  .modal-topo .abas-filtro {
+    flex: 1 1 100%;
+  }
+
+  .acoes-linha {
+    flex-wrap: wrap;
+  }
+
+  .acoes-linha .botao {
+    flex: 1 1 0;
+    min-height: 46px;
+    padding: 0 10px;
+  }
+
+  /* Duas colunas de dados, e não uma: numa coluna só a ficha de uma moto
+     virava três telas de rolagem. */
+  .linhas-dados {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+  }
+
+  .linhas-dados dd {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  /* A situação é um selo mais uma frase ("de R$ 15.000,00 a receber"):
+     espremida em meia largura, quebrava no meio do valor. */
+  .linhas-dados > div:has(.selo) {
+    grid-column: 1 / -1;
+  }
+
+  .resumo-cartoes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  /* Número ímpar de cartões: o primeiro — sempre o número principal da tela
+     — ocupa a linha inteira, em vez de sobrar um sozinho no fim. */
+  .resumo-cartoes > .cartao:first-child:nth-last-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .resumo-cartoes .cartao {
+    padding: 12px 14px;
+  }
+
+  .resumo-rotulo,
+  .resumo-detalhe {
+    font-size: 12px;
+  }
+
+  .resumo-valor {
+    font-size: 19px;
+    overflow-wrap: anywhere;
+  }
+
+  .topo-financeiro {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .seletor-mes {
+    justify-content: space-between;
+  }
+
+  .seletor-mes strong {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .seletor-mes .botao {
+    min-width: 48px;
+    min-height: 44px;
+    font-size: 20px;
+  }
+
+  /* --------------------------------------------- tabelas viram cartões */
+
+  /* Uma tabela de seis colunas numa tela de 390px só existe rolando pro
+     lado — e aí a coluna que importa ("Situação", "Em aberto") fica escondida
+     fora da tela. Cada linha vira um cartão: o primeiro campo é o título, os
+     outros vêm com o nome da coluna em cima (`data-rotulo`, preenchido pelas
+     telas). A marcação continua sendo a mesma tabela, então o toque que abre
+     o detalhe funciona sem mudar nada. */
+  .tabela-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  table.tabela,
+  table.tabela tbody {
+    display: block;
+    background: transparent;
+  }
+
+  table.tabela thead {
+    display: none;
+  }
+
+  table.tabela tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--fundo);
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+  }
+
+  table.tabela tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  table.tabela td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  table.tabela td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+
+  table.tabela td:first-child {
+    grid-column: 1 / -1;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  table.tabela td:first-child .fraco {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Com número par de campos, o último sobraria sozinho em meia linha. */
+  table.tabela td:nth-child(even):last-child,
+  table.tabela td[colspan] {
+    grid-column: 1 / -1;
+  }
+
+  table.tabela td[colspan] {
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  table.tabela tbody tr[data-id]:active,
+  table.tabela tbody tr[data-dia]:active {
+    border-color: var(--laranja);
+  }
+
+  /* Financeiro: o dia aberto e o que aconteceu nele formam um cartão só. */
+  table.tabela tr.linha-dia-aberta {
+    margin-bottom: 0;
+    background: var(--laranja-fundo);
+    border-color: var(--laranja-claro);
+    border-radius: 12px 12px 0 0;
+  }
+
+  table.tabela tr.linha-dia-aberta td {
+    background: transparent;
+  }
+
+  table.tabela tr.detalhe-dia {
+    display: block;
+    background: var(--papel);
+    border-color: var(--laranja-claro);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+  }
+
+  table.tabela tr.detalhe-dia td {
+    padding: 0;
+    background: transparent;
+  }
+
+  /* ------------------------------------------------------------- listas */
+
+  .lista-despesas li,
+  .sub-parcelas li,
+  .lista-fila li {
+    flex-wrap: wrap;
+  }
+
+  .sub-parcelas .linha-acao {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px 12px;
+  }
+
+  .sub-parcelas .botao--pequeno,
+  .lista-fila .botao--pequeno {
+    min-height: 40px;
+    padding: 0 16px;
+  }
+
+  .lista-movimentos li {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .lista-movimentos .descricao {
+    flex: 1 1 55%;
+    min-width: 0;
+  }
+
+  .item-historico {
+    padding: 12px;
+  }
+
+  .chave-mostrada {
+    padding: 14px 8px;
+    font-size: 18px;
+    letter-spacing: 1px;
+    overflow-wrap: anywhere;
+  }
+
+  /* --------------------------------------------- modal vira folha de baixo */
+
+  /* Sobe de baixo e ocupa a largura toda: os botões de confirmar ficam onde
+     o polegar alcança, e nada do formulário é cortado nas laterais. */
+  .sobreposicao {
+    flex-direction: column;
+    align-items: stretch;
+    padding: calc(24px + var(--seguro-topo)) 0 0;
+  }
+
+  /* `margin-top: auto`, e não alinhar no fim: alinhado no fim, um formulário
+     mais alto que a tela tinha o topo empurrado pra cima, num lugar que a
+     rolagem não alcança. A margem automática some quando falta espaço, e aí
+     a folha rola a partir do título. */
+  .modal {
+    width: 100%;
+    margin-top: auto;
+    padding: 20px 16px calc(20px + var(--seguro-baixo));
+    border-radius: 18px 18px 0 0;
+  }
+
+  .acoes-modal {
+    flex-wrap: wrap;
+  }
+
+  .acoes-modal .botao {
+    flex: 1 1 0;
+  }
+
+  .grade-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-linha .campo {
+    flex: 1 1 100%;
+  }
+
+  /* Linha que quebra: o valor vai pro canto direito, embaixo do texto — onde
+     o olho procura um número —, e não solto no começo da linha de baixo. */
+  .lista-despesas li > strong,
+  .lista-movimentos li > strong,
+  .lista-movimentos li > .fraco:last-child {
+    margin-left: auto;
+  }
+
+  /* Descrição de três linhas com o selo centralizado ao lado parecia outro
+     item. Alinhado em cima, o selo fica na mesma linha em que a frase começa. */
+  .lista-movimentos li {
+    align-items: flex-start;
+  }
+
+  /* ---------------------------------------------------------------- login */
+
+  .tela-login {
+    padding: calc(16px + var(--seguro-topo)) 16px calc(16px + var(--seguro-baixo));
+  }
+
+  .cartao-login {
+    padding: 24px 20px;
+  }
 }

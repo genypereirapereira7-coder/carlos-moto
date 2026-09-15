@@ -2,10 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- `viewport-fit=cover`: desenha até a borda do iPhone, atrás do entalhe e
+       da barrinha de baixo. O CSS devolve o espaço com `env(safe-area-inset-*)`
+       — sem isto sobram faixas pretas em cima e embaixo do app instalado. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Carlos Moto — Dono</title>
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#151311" />
+  <!-- O iPhone não lê tudo do manifesto: o "abre como app", o nome embaixo do
+       ícone e a cor da barra de status vêm destas linhas. -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Carlos Moto" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" href="./icones/icone-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="./icones/apple-touch-icon.png" />
   <link rel="stylesheet" href="../comum/estilo.css" />
@@ -23,26 +32,69 @@
                spellcheck="false" autocapitalize="characters" required />
       </label>
       <p class="fraco">
-        Só desta vez. Depois de conectar, este computador não pede mais nada.
+        Só desta vez. Depois de conectar, este aparelho não pede mais nada.
       </p>
-      <button class="botao" type="submit">Conectar este computador</button>
+      <button class="botao" type="submit">Conectar este aparelho</button>
+      <button id="botao-instalar-login" class="botao botao--instalar" type="button" hidden>
+        Instalar no celular
+      </button>
+      <p id="dica-instalar-login" class="fraco dica-instalar" hidden>
+        Vai usar no iPhone? Instale antes de conectar: o app instalado guarda
+        tudo separado do Safari, e assim a chave é digitada uma vez só.
+      </p>
     </form>
   </div>
 
   <div id="app" class="app" hidden>
-    <nav class="lateral">
+    <nav class="lateral" aria-label="Menu principal">
       <div class="marca">
         <span class="ponto" id="ponto-conexao" data-estado="offline"></span>
-        Carlos Moto
+        <span class="marca-nome">Carlos Moto</span>
       </div>
-      <button class="aba" data-tab="motos" type="button">Motos</button>
-      <button class="aba" data-tab="clientes" type="button">Clientes</button>
-      <button class="aba" data-tab="parcelas" type="button">Parcelas</button>
-      <button class="aba" data-tab="financeiro" type="button">Financeiro</button>
+
+      <div class="abas-principais">
+        <button class="aba" data-tab="motos" type="button">
+          <svg class="aba-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="5.5" cy="16" r="3.5" /><circle cx="18.5" cy="16" r="3.5" />
+            <path d="M5.5 16h5l3-6h-4M13.5 10l1.6-3.5H18M15.8 10l2.7 6" />
+          </svg>
+          <span>Motos</span>
+        </button>
+        <button class="aba" data-tab="clientes" type="button">
+          <svg class="aba-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+            <path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.2A6.5 6.5 0 0 1 21.5 20" />
+          </svg>
+          <span>Clientes</span>
+        </button>
+        <button class="aba" data-tab="parcelas" type="button">
+          <svg class="aba-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+            <path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4" />
+          </svg>
+          <span>Parcelas</span>
+        </button>
+        <button class="aba" data-tab="financeiro" type="button">
+          <svg class="aba-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 20h16M7 20v-5M12 20V9M17 20v-8" /><path d="M5 9l5-4 4 3 5-4" />
+          </svg>
+          <span>Financeiro</span>
+        </button>
+      </div>
+
       <button class="aba aba--fila" id="botao-fila" type="button" hidden>
-        <span id="fila-contador">0</span> esperando internet
+        <span id="fila-contador">0</span> <span class="fila-texto">esperando internet</span>
       </button>
-      <div class="lateral-rodape">
+
+      <!-- Dentro da `nav`, e não solto no body: a barra do celular é sticky e
+           isso cria uma camada própria. Fora dela, o fundo escuro ficaria por
+           cima do menu que ele deveria só sombrear. -->
+      <div class="fundo-menu" id="fundo-menu" hidden></div>
+      <div class="lateral-rodape" id="menu-mais">
         <button id="botao-instalar" class="botao botao--instalar" type="button" hidden>
           Instalar no computador
         </button>
@@ -52,8 +104,25 @@
         <span id="usuario-nome" class="fraco"></span>
         <button id="botao-sair" class="botao botao--fantasma" type="button">Sair</button>
       </div>
+
+      <button id="botao-mais" class="botao-mais" type="button" aria-label="Mais opções"
+              aria-expanded="false" aria-controls="menu-mais">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+        </svg>
+      </button>
     </nav>
+
     <div class="area">
+      <div id="convite-instalar" class="convite-instalar" hidden>
+        <img src="./icones/icone-192.png" alt="" width="40" height="40" />
+        <div class="convite-texto">
+          <strong>Instale no celular</strong>
+          <span>Abre como app, direto da tela inicial.</span>
+        </div>
+        <button id="convite-sim" class="botao botao--pequeno" type="button">Instalar</button>
+        <button id="convite-nao" class="convite-fechar" type="button" aria-label="Agora não">×</button>
+      </div>
       <div id="faixa-offline" class="faixa-offline" hidden></div>
       <main id="conteudo" class="conteudo"></main>
     </div>

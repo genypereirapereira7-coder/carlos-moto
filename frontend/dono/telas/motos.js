@@ -82,10 +82,10 @@ export async function renderMotos(raiz) {
       corpoTabela().innerHTML = motos.map((m) => `
         <tr data-id="${m.id}">
           <td>${escapar(m.placa || "—")}</td>
-          <td>${escapar(m.marca)} ${escapar(m.modelo)}</td>
-          <td>${m.ano}</td>
-          <td><span class="selo ${m.status === "DISPONIVEL" ? "selo--disponivel" : "selo--vendida"}">${m.status === "DISPONIVEL" ? "Disponível" : "Vendida"}</span></td>
-          <td>${reais(m.preco_centavos)}</td>
+          <td data-rotulo="Marca / Modelo">${escapar(m.marca)} ${escapar(m.modelo)}</td>
+          <td data-rotulo="Ano">${m.ano}</td>
+          <td data-rotulo="Status"><span class="selo ${m.status === "DISPONIVEL" ? "selo--disponivel" : "selo--vendida"}">${m.status === "DISPONIVEL" ? "Disponível" : "Vendida"}</span></td>
+          <td data-rotulo="Preço">${reais(m.preco_centavos)}</td>
         </tr>
       `).join("");
 

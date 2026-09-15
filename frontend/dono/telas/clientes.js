@@ -106,11 +106,11 @@ export async function renderClientes(raiz) {
     corpoTabela().innerHTML = lista.map((c) => `
       <tr data-id="${c.id}">
         <td>${escapar(c.nome)}</td>
-        <td>${formatarCpf(c.cpf)}</td>
-        <td>${escapar(formatarTelefone(c.telefone))}</td>
-        <td>${c.qtd_comprou}</td>
-        <td>${c.qtd_vendeu}</td>
-        <td>${selo(c)}</td>
+        <td data-rotulo="CPF">${formatarCpf(c.cpf)}</td>
+        <td data-rotulo="Telefone">${escapar(formatarTelefone(c.telefone))}</td>
+        <td data-rotulo="Comprou">${c.qtd_comprou}</td>
+        <td data-rotulo="Vendeu">${c.qtd_vendeu}</td>
+        <td data-rotulo="Parcelas">${selo(c)}</td>
       </tr>
     `).join("");
   }

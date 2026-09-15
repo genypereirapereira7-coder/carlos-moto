@@ -76,7 +76,7 @@ export async function renderFinanceiro(raiz) {
     <div class="resumo-cartoes" id="cartoes-financeiro"></div>
     <div class="cartao">
       <h3>Dia a dia</h3>
-      <p class="fraco">Clique num dia pra ver o que aconteceu.</p>
+      <p class="fraco">Abra um dia pra ver o que aconteceu nele.</p>
       <div id="dias-financeiro"><p class="fraco">Carregando…</p></div>
     </div>
   `;
@@ -162,10 +162,10 @@ export async function renderFinanceiro(raiz) {
             ${f.dias.map((d) => `
               <tr data-dia="${d.dia}" class="${d.dia === diaAberto ? "linha-dia-aberta" : ""}">
                 <td><strong>${dataBr(d.dia)}</strong> <span class="fraco">${diaDaSemana(d.dia)}</span></td>
-                <td class="${d.entrou_centavos ? "entrada" : "fraco"}">${d.entrou_centavos ? reais(d.entrou_centavos) : "—"}</td>
-                <td class="${d.saiu_centavos ? "saida" : "fraco"}">${d.saiu_centavos ? reais(d.saiu_centavos) : "—"}</td>
-                <td class="${classeDoValor(d.saldo_centavos)}"><strong>${reais(d.saldo_centavos)}</strong></td>
-                <td>${escapar(resumoDoDia(d.movimentos))}</td>
+                <td data-rotulo="Entrou" class="${d.entrou_centavos ? "entrada" : "fraco"}">${d.entrou_centavos ? reais(d.entrou_centavos) : "—"}</td>
+                <td data-rotulo="Saiu" class="${d.saiu_centavos ? "saida" : "fraco"}">${d.saiu_centavos ? reais(d.saiu_centavos) : "—"}</td>
+                <td data-rotulo="Saldo do dia" class="${classeDoValor(d.saldo_centavos)}"><strong>${reais(d.saldo_centavos)}</strong></td>
+                <td data-rotulo="O que aconteceu">${escapar(resumoDoDia(d.movimentos))}</td>
               </tr>
               ${d.dia === diaAberto ? linhaDetalhe(d) : ""}
             `).join("")}

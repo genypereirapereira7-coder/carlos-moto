@@ -364,8 +364,38 @@ function _mensagem(dados, resposta) {
   return `Erro ${resposta.status}`;
 }
 
+/**
+ * Nome do aparelho na lista "Chave e aparelhos" — é por ele que o dono acha
+ * qual desconectar quando um celular se perde.
+ *
+ * Saía do trecho entre parênteses do user agent, e o Chrome de hoje reduz
+ * esse trecho de propósito: todo Android virava "K", e todo Mac "Intel Mac OS
+ * X 10_15_7", até Mac que nem é Intel. Numa lista com dois "K", não dá pra
+ * saber qual é o celular perdido.
+ */
 function _dispositivo() {
   const ua = navigator.userAgent;
-  const modelo = /\(([^)]+)\)/.exec(ua)?.[1]?.split(";").pop()?.trim();
-  return `${modelo || "navegador"} · ${_app()}`.slice(0, 120);
+  const toque = navigator.maxTouchPoints > 1;
+
+  let aparelho = "Navegador";
+  if (/iPhone|iPod/.test(ua)) aparelho = "iPhone";
+  else if (/iPad/.test(ua) || (/Macintosh/.test(ua) && toque)) aparelho = "iPad";
+  else if (/Android/.test(ua)) aparelho = /Mobile/.test(ua) ? "Celular Android" : "Tablet Android";
+  else if (/Windows/.test(ua)) aparelho = "Computador Windows";
+  else if (/Macintosh/.test(ua)) aparelho = "Mac";
+  else if (/CrOS/.test(ua)) aparelho = "Chromebook";
+  else if (/Linux/.test(ua)) aparelho = "Computador Linux";
+
+  let navegador = "";
+  if (/SamsungBrowser/.test(ua)) navegador = "Samsung Internet";
+  else if (/EdgA?\/|EdgiOS/.test(ua)) navegador = "Edge";
+  else if (/FxiOS|Firefox\//.test(ua)) navegador = "Firefox";
+  else if (/CriOS|Chrome\//.test(ua)) navegador = "Chrome";
+  else if (/Safari\//.test(ua)) navegador = "Safari";
+
+  const instalado = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  return [aparelho, navegador, instalado ? "app instalado" : "", _app() === "dono" ? "" : _app()]
+    .filter(Boolean)
+    .join(" · ")
+    .slice(0, 120);
 }

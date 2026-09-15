@@ -183,11 +183,11 @@ export async function renderParcelas(raiz) {
       return `
         <tr data-id="${g.id}">
           <td>${escapar(g.nome)}<br /><span class="fraco">${formatarCpf(g.cpf)}</span></td>
-          <td>${escapar(formatarTelefone(g.telefone))}</td>
-          <td>${[...g.motos].map(escapar).join("<br />")}</td>
-          <td>${reais(g.emAberto)}<br /><span class="fraco">${contar(g.qtd, "parcela", "parcelas")}</span></td>
-          <td class="${vencido ? "texto-devendo" : ""}">${vencido ? "venceu " : ""}${dataBr(g.proximo)}</td>
-          <td>${g.atrasado > 0
+          <td data-rotulo="Telefone">${escapar(formatarTelefone(g.telefone))}</td>
+          <td data-rotulo="Moto">${[...g.motos].map(escapar).join("<br />")}</td>
+          <td data-rotulo="Em aberto">${reais(g.emAberto)}<br /><span class="fraco">${contar(g.qtd, "parcela", "parcelas")}</span></td>
+          <td data-rotulo="Próximo vencimento" class="${vencido ? "texto-devendo" : ""}">${vencido ? "venceu " : ""}${dataBr(g.proximo)}</td>
+          <td data-rotulo="Situação">${g.atrasado > 0
             ? `<span class="selo selo--devendo">Atrasado ${reais(g.atrasado)}</span>`
             : '<span class="selo selo--pendente">Em dia</span>'}</td>
         </tr>

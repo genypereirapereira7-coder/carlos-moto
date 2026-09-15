@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v22";
+const VERSAO = "v23";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -21,6 +21,7 @@ const CASCA = [
   "./validacao.js",
   "./fila-ui.js",
   "./acesso.js",
+  "./instalar.js",
   "./dados-motos.js",
   "./marca-modelo.js",
   "./dono.css",

@@ -53,7 +53,7 @@ export async function abrirPainel() {
   const modal = abrirModal(`
     <h3>Esperando internet</h3>
     <p class="fraco">
-      Isto já está guardado neste computador e sobe sozinho quando a conexão
+      Isto já está guardado neste aparelho e sobe sozinho quando a conexão
       voltar. Pode fechar o sistema que não se perde.
     </p>
     <ul class="lista-fila" id="lista-fila"></ul>

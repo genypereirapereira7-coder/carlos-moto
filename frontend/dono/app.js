@@ -1,10 +1,11 @@
-/** Bootstrap do painel do dono: login, menu lateral, conexão em tempo real. */
+/** Bootstrap do painel do dono: login, menu, conexão em tempo real. */
 
 import * as api from "../comum/api.js";
 import { conectar } from "../comum/ws.js";
-import { avisar, abrirModal, fecharModal } from "./ui.js";
+import { avisar } from "./ui.js";
 import { atualizarContador, sincronizar } from "./fila-ui.js";
 import { abrirPainelDeAcesso } from "./acesso.js";
+import * as instalar from "./instalar.js";
 import { marcarErro, limparErros } from "./validacao.js";
 import { renderMotos } from "./telas/motos.js";
 import { renderClientes } from "./telas/clientes.js";
@@ -26,12 +27,45 @@ const TELAS = {
 
 let abaAtual = null;
 
+// --------------------------------------------------------- menu do celular
+
+// No celular a lateral vira duas barras: as quatro abas embaixo, perto do
+// polegar, e o resto — instalar, chave, sair — num menu "Mais". São coisas de
+// uma vez na vida, e não podem roubar lugar das abas, que se usa o dia
+// inteiro. No computador o botão "Mais" nem aparece e isto não faz nada.
+const lateral = document.querySelector(".lateral");
+const botaoMais = document.getElementById("botao-mais");
+const fundoMenu = document.getElementById("fundo-menu");
+
+function menuAberto(aberto) {
+  lateral.dataset.menu = aberto ? "aberto" : "";
+  botaoMais.setAttribute("aria-expanded", aberto ? "true" : "false");
+  fundoMenu.hidden = !aberto;
+}
+
+botaoMais.addEventListener("click", () => menuAberto(lateral.dataset.menu !== "aberto"));
+fundoMenu.addEventListener("click", () => menuAberto(false));
+// Tocou numa opção: o menu sai da frente do que ela for abrir.
+document.getElementById("menu-mais").addEventListener("click", (evento) => {
+  if (evento.target.closest("button")) menuAberto(false);
+});
+window.addEventListener("keydown", (evento) => {
+  if (evento.key === "Escape") menuAberto(false);
+});
+
+// ------------------------------------------------------------------- abas
+
 function abrirAba(nome) {
   abaAtual = nome;
+  menuAberto(false);
   document.querySelectorAll(".aba").forEach((botao) => {
     botao.dataset.ativa = botao.dataset.tab === nome ? "1" : "0";
   });
   location.hash = nome;
+  // Trocou de aba: começa do topo, e não no meio da rolagem da anterior. No
+  // celular quem rola é o documento; no computador, o `body`.
+  window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
   TELAS[nome]?.(conteudo);
 }
 
@@ -56,6 +90,7 @@ function mostrarApp(nome) {
 function mostrarLogin() {
   app.hidden = true;
   telaLogin.hidden = false;
+  oferecerInstalacao();
 }
 
 // ------------------------------------------------------------------ login
@@ -99,7 +134,7 @@ document.getElementById("botao-sair").addEventListener("click", async () => {
   mostrarLogin();
 });
 
-document.querySelectorAll(".aba").forEach((botao) => {
+document.querySelectorAll(".aba[data-tab]").forEach((botao) => {
   botao.addEventListener("click", () => abrirAba(botao.dataset.tab));
 });
 
@@ -164,79 +199,71 @@ api.aoMudarOrigem(({ deCache, gravadoEm }) => {
 
 // ---------------------------------------------------------------- instalar
 
-// O navegador dispara `beforeinstallprompt` quando o app cumpre os requisitos
-// de instalação — manifest com ícone de 192 e de 512, service worker, origem
-// segura — e ainda não está instalado. Guardar o evento é obrigatório:
-// `prompt()` só funciona a partir dele.
-let pedidoDeInstalacao = null;
+// Três portas pro mesmo lugar, porque cada uma pega o dono num momento:
+//   - no menu (lateral no computador, "Mais" no celular): sempre à mão;
+//   - o convite no topo do painel, só no celular — lá ninguém abre um menu
+//     procurando "instalar", e quem não vê o convite não instala nunca;
+//   - na tela da chave, também só no celular. No iPhone é a hora certa: o app
+//     instalado guarda tudo separado do Safari, e quem conecta antes de
+//     instalar digita a chave duas vezes.
 const botaoInstalar = document.getElementById("botao-instalar");
+const botaoInstalarLogin = document.getElementById("botao-instalar-login");
+const dicaInstalarLogin = document.getElementById("dica-instalar-login");
+const conviteInstalar = document.getElementById("convite-instalar");
 
-// Aberto como aplicativo (janela própria, sem barra de endereço) não tem o
-// que instalar.
-const jaEhAplicativo = () => window.matchMedia("(display-mode: standalone)").matches;
+// Onde o navegador entrega o pedido pronto, o botão espera um pouco por ele
+// antes de aparecer pelo caminho das instruções — senão ele surge, e um
+// segundo depois muda de comportamento. No iPhone e no navegador de dentro de
+// outro app esse pedido nunca vem, então lá não há o que esperar.
+let semPedidoPodeMostrar = instalar.aparelho.ios || instalar.aparelho.dentroDeApp;
 
-window.addEventListener("beforeinstallprompt", (evento) => {
-  // Sem o preventDefault o Chrome mostra a barrinha dele por cima do painel.
-  evento.preventDefault();
-  pedidoDeInstalacao = evento;
-  if (!jaEhAplicativo()) botaoInstalar.hidden = false;
-});
+function pintarInstalacao() {
+  const oferecer = !instalar.ehAplicativo() && !instalar.jaInstalou()
+    && (instalar.temPedidoPronto() || semPedidoPodeMostrar);
+  const noCelular = oferecer && instalar.aparelho.celular;
 
-window.addEventListener("appinstalled", () => {
-  pedidoDeInstalacao = null;
-  botaoInstalar.hidden = true;
-  avisar("Instalado! Procure Carlos Moto entre os seus programas", "ok");
-});
-
-/**
- * Safari e Firefox não têm `beforeinstallprompt` — neles a instalação é pelo
- * menu do navegador. Em vez de sumir com o botão e deixar o dono sem saber
- * que dá pra instalar, ele abre as instruções.
- */
-function explicarComoInstalar() {
-  const modal = abrirModal(`
-    <div class="modal-topo"><h3>Instalar no computador</h3></div>
-    <p class="fraco">Este navegador não instala sozinho. Em dois cliques:</p>
-    <ul class="lista-ajuda">
-      <li><strong>Chrome ou Edge:</strong> menu <strong>⋮</strong> no canto superior direito →
-        <strong>Transmitir, salvar e compartilhar</strong> → <strong>Instalar página como app</strong>.</li>
-      <li><strong>Safari:</strong> menu <strong>Arquivo</strong> → <strong>Adicionar à Dock</strong>.</li>
-    </ul>
-    <p class="fraco">Depois de instalado ele abre em janela própria, sem barra de
-      endereço, e continua funcionando sem internet.</p>
-    <div class="acoes-modal">
-      <button class="botao" data-fechar type="button">Entendi</button>
-    </div>
-  `);
-  modal.querySelector("[data-fechar]").addEventListener("click", () => fecharModal(modal));
+  botaoInstalar.textContent = instalar.rotulo();
+  botaoInstalar.hidden = !oferecer;
+  botaoInstalarLogin.hidden = !noCelular;
+  dicaInstalarLogin.hidden = !(noCelular && instalar.aparelho.ios);
+  conviteInstalar.hidden = !(noCelular && !instalar.conviteDispensado());
 }
 
-botaoInstalar.addEventListener("click", async () => {
-  if (!pedidoDeInstalacao) {
-    explicarComoInstalar();
-    return;
-  }
-
-  botaoInstalar.disabled = true;
-  pedidoDeInstalacao.prompt();
-  const { outcome } = await pedidoDeInstalacao.userChoice;
-  // O evento não se reaproveita. Se o dono recusar, o navegador manda outro
-  // mais tarde — até lá o botão cai no caminho das instruções.
-  pedidoDeInstalacao = null;
-  botaoInstalar.disabled = false;
-  if (outcome !== "accepted") {
-    avisar("Tudo bem — dá pra instalar depois por este botão", "ok");
-  }
-});
-
-// Se o evento não veio (navegador que não suporta, ou app já instalado em
-// outro perfil), o botão aparece assim mesmo pra oferecer as instruções.
 function oferecerInstalacao() {
-  if (jaEhAplicativo()) return;
+  pintarInstalacao();
+  if (semPedidoPodeMostrar) return;
   setTimeout(() => {
-    if (!jaEhAplicativo()) botaoInstalar.hidden = false;
+    semPedidoPodeMostrar = true;
+    pintarInstalacao();
   }, 3000);
 }
+
+async function aoTocarInstalar(botao) {
+  botao.disabled = true;
+  try {
+    if ((await instalar.instalar()) === "recusado") {
+      avisar("Tudo bem — dá pra instalar depois, pelo menu", "ok");
+    }
+  } finally {
+    botao.disabled = false;
+    pintarInstalacao();
+  }
+}
+
+botaoInstalar.addEventListener("click", () => aoTocarInstalar(botaoInstalar));
+botaoInstalarLogin.addEventListener("click", () => aoTocarInstalar(botaoInstalarLogin));
+document.getElementById("convite-sim").addEventListener("click", (evento) => {
+  aoTocarInstalar(evento.currentTarget);
+});
+document.getElementById("convite-nao").addEventListener("click", () => {
+  instalar.dispensarConvite();
+  pintarInstalacao();
+});
+
+instalar.aoMudar((oQue) => {
+  if (oQue === "instalado") avisar("Instalado! Procure Carlos Moto entre os seus apps", "ok");
+  pintarInstalacao();
+});
 
 // -------------------------------------------------------------- fila offline
 
