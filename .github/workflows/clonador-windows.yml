@@ -1,0 +1,75 @@
+# Compila o clonador do sistema antigo num .exe de Windows.
+#
+# Existe porque o desenvolvimento acontece no Mac, e executável de Windows só
+# se faz no Windows. O GitHub empresta a máquina: aperta "Run workflow" e, uns
+# minutos depois, o .exe está pronto pra baixar em "Artifacts".
+#
+# O endereço do sistema novo vai embutido. A chave de acesso NÃO: um .exe com
+# a chave dentro abre o sistema pra quem pegar o arquivo. Ela é colada uma vez,
+# na hora de rodar.
+
+name: Clonador do sistema antigo (.exe do Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      endereco:
+        description: "Endereço do sistema novo"
+        required: true
+        default: "https://carlos-moto-production.up.railway.app"
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar o que o programa precisa
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller asyncpg
+
+      - name: Embutir o endereço do sistema novo
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          endereco = os.environ["ENDERECO"].rstrip("/")
+          arquivo = Path("migracao/agente.py")
+          texto = arquivo.read_text(encoding="utf-8")
+          velho = 'ENDERECO = os.environ.get("CARLOSMOTO_ENDERECO", "")'
+          assert texto.count(velho) == 1, "a linha do endereço mudou de forma"
+          arquivo.write_text(
+              texto.replace(velho, f'ENDERECO = os.environ.get("CARLOSMOTO_ENDERECO", "{endereco}")'),
+              encoding="utf-8",
+          )
+          print(f"endereço embutido: {endereco}")
+        env:
+          ENDERECO: ${{ inputs.endereco }}
+
+      - name: Compilar num arquivo só
+        run: >
+          pyinstaller --onefile --name MigrarCarlosMoto
+          --paths backend
+          --collect-submodules app
+          --hidden-import app.servicos.migracao
+          migracao/agente.py
+
+      - name: Conferir que saiu um executável
+        shell: python
+        run: |
+          from pathlib import Path
+          exe = Path("dist/MigrarCarlosMoto.exe")
+          assert exe.is_file(), "o .exe não foi gerado"
+          print(f"{exe.name}: {exe.stat().st_size / 1024 / 1024:.1f} MB")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MigrarCarlosMoto
+          path: dist/MigrarCarlosMoto.exe
+          retention-days: 30

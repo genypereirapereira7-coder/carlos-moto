@@ -22,7 +22,19 @@ Access (`.mdb`, `.accdb`) e Firebird (`.fdb`, `.gdb`) **não** — eles precisam
 de um driver que só existe na máquina do cliente. A rota recusa com essa
 explicação, em vez de aceitar e falhar meia hora depois.
 
-**2. O servidor lê o disco direto.** Só quando ele está rodando no computador
+**2. O programa que o cliente executa (`MigrarCarlosMoto.exe`).** Um arquivo
+só, dois cliques: procura o sistema antigo no disco, escolhe o mais provável,
+manda pra nuvem e mostra o que copiou. Ninguém escolhe arquivo nenhum — é o
+mais perto de "clica e clona" que existe, porque **só um programa rodando
+naquela máquina pode ler o disco dela**; página de internet nenhuma pode.
+
+O código é `agente.py`. O `.exe` sai da automação
+`.github/workflows/clonador-windows.yml` (Actions → "Clonador do sistema
+antigo" → Run workflow), porque executável de Windows só se compila no
+Windows. O endereço do sistema vai embutido; a chave de acesso não — um `.exe`
+com a chave dentro abre o sistema pra quem pegar o arquivo.
+
+**3. O servidor lê o disco direto.** Só quando ele está rodando no computador
 onde o sistema antigo está. É o caminho pro Access e pro Firebird, e pra banco
 grande demais pra subir pela internet da loja. Sem
 `CARLOSMOTO_MIGRACAO_ORIGEM` essa metade some da tela.
