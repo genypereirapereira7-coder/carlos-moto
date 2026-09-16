@@ -6,14 +6,28 @@ Um botão no painel do dono lê o sistema antigo que está no computador do
 cliente e copia **tudo** para o schema `migracao` no Postgres da nuvem, como
 texto. Nada é interpretado aqui — converter é o passo 2.
 
-## Onde funciona
+## Dois caminhos
 
-Só onde o sistema antigo está. O servidor que atende a rota precisa estar
-rodando **naquele computador**: um servidor na nuvem não enxerga o disco de
-ninguém, e o navegador tampouco. Na Railway as variáveis abaixo ficam vazias,
-a rota responde 409 e o botão nem aparece.
+**1. O cliente envia o arquivo (funciona da nuvem).** Ele clica no botão,
+escolhe o banco do sistema antigo e manda. O navegador não deixa um site
+vasculhar o disco, mas deixa a pessoa apontar um arquivo de propósito — e é
+essa a diferença. Serve pra quem abre o sistema pelo endereço da internet, sem
+instalar nada no computador da loja.
 
-## Ligar (só na máquina do cliente)
+Formatos que o servidor da nuvem abre sozinho: `.db`, `.sqlite`, `.dbf`,
+`.csv`, `.txt` e `.zip` (a pasta inteira do sistema antigo, compactada). Até
+500 MB.
+
+Access (`.mdb`, `.accdb`) e Firebird (`.fdb`, `.gdb`) **não** — eles precisam
+de um driver que só existe na máquina do cliente. A rota recusa com essa
+explicação, em vez de aceitar e falhar meia hora depois.
+
+**2. O servidor lê o disco direto.** Só quando ele está rodando no computador
+onde o sistema antigo está. É o caminho pro Access e pro Firebird, e pra banco
+grande demais pra subir pela internet da loja. Sem
+`CARLOSMOTO_MIGRACAO_ORIGEM` essa metade some da tela.
+
+## Ligar o caminho 2 (só na máquina do cliente)
 
 ```
 CARLOSMOTO_MIGRACAO_ORIGEM=C:\SistemaAntigo\dados.mdb

@@ -1,9 +1,14 @@
 /**
  * Botão PROVISÓRIO de migração do sistema antigo — sai depois da virada.
  *
- * Só aparece quando o servidor diz que dá: ele precisa estar rodando no
- * computador onde o sistema antigo está. Um clique copia tudo pro espelho na
- * nuvem, e a janela acompanha tabela por tabela.
+ * Dois caminhos, e a janela mostra o que o servidor disser que dá:
+ *
+ *   - **Enviar o arquivo**: o dono escolhe o banco do sistema antigo na tela e
+ *     manda pra nuvem. Funciona de qualquer computador, sem instalar nada. O
+ *     navegador não deixa um site vasculhar o disco, mas deixa a pessoa
+ *     apontar um arquivo — e é essa a diferença.
+ *   - **Copiar daqui**: o servidor lê o disco direto. Só existe quando ele
+ *     está rodando no computador onde o sistema antigo está.
  */
 
 import * as api from "../comum/api.js";
@@ -19,10 +24,12 @@ const TITULO = {
   FALHOU: "A cópia não aconteceu",
 };
 
+let estadoAtual = null;
+
 export async function oferecerMigracao() {
   try {
-    const estado = await api.pedir("GET", "/migracao/estado");
-    botao.hidden = !estado.disponivel;
+    estadoAtual = await api.pedir("GET", "/migracao/estado");
+    botao.hidden = !(estadoAtual.disponivel || estadoAtual.envio);
   } catch {
     botao.hidden = true;
   }
@@ -69,30 +76,84 @@ async function acompanhar(modal, loteId) {
 }
 
 botao.addEventListener("click", () => {
+  const estado = estadoAtual || {};
+  const formatos = (estado.formatos || []).join(", ");
+
   const modal = abrirModal(`
     <div class="modal-topo"><h3>Migrar o sistema antigo — passo 1</h3></div>
-    <p>Copia <strong>tudo</strong> do sistema antigo deste computador pra nuvem, do jeito que está:
-      clientes, contratos, tickets, dados da empresa e qualquer outra tabela que existir.</p>
+    <p>Copia <strong>tudo</strong> do sistema antigo pra nuvem, do jeito que está: clientes,
+      contratos, tickets, dados da empresa e qualquer outra tabela que existir.</p>
     <p class="fraco">O sistema antigo não é alterado, e nada entra ainda no sistema novo — a cópia
-      fica separada, esperando o passo 2. Pode repetir: cada clique gera um lote novo.</p>
+      fica separada, esperando o passo 2. Pode repetir: cada envio gera um lote novo.</p>
+
+    ${estado.envio ? `
+      <h3 class="secao-seguinte">Enviar o arquivo do sistema antigo</h3>
+      <label class="campo">Escolha o arquivo no seu computador
+        <input type="file" id="migracao-arquivo" accept="${(estado.formatos || []).join(",")}" />
+      </label>
+      <p class="fraco">Aceita ${formatos || "os formatos do sistema antigo"}, até
+        ${estado.limite_mb || 500} MB. Se o sistema antigo for uma pasta com vários arquivos,
+        compacte a pasta em .zip e mande o .zip.</p>
+      <div class="acoes-modal">
+        <button class="botao" id="migracao-enviar" type="button">Enviar e copiar</button>
+      </div>` : ""}
+
+    ${estado.disponivel ? `
+      <h3 class="secao-seguinte">Ou copiar direto deste computador</h3>
+      <p class="fraco">O sistema antigo foi encontrado aqui: <strong>${escapar(estado.origem || "")}</strong></p>
+      <div class="acoes-modal">
+        <button class="botao botao--fantasma" id="migracao-iniciar" type="button">Copiar daqui</button>
+      </div>` : ""}
+
     <p id="migracao-situacao" class="fraco"></p>
     <ul class="lista-fila" id="migracao-tabelas"></ul>
     <ul class="lista-simples" id="migracao-erros"></ul>
     <div class="acoes-modal">
       <button class="botao botao--fantasma" data-fechar type="button">Fechar</button>
-      <button class="botao" id="migracao-iniciar" type="button">Copiar agora</button>
     </div>
   `);
 
+  const situacao = (texto) => { modal.querySelector("#migracao-situacao").textContent = texto; };
+  const esconderEscolhas = () => {
+    for (const id of ["#migracao-enviar", "#migracao-iniciar", "#migracao-arquivo"]) {
+      const alvo = modal.querySelector(id);
+      if (alvo) alvo.closest(".acoes-modal, .campo")?.setAttribute("hidden", "");
+    }
+  };
+
   modal.querySelector("[data-fechar]").addEventListener("click", () => fecharModal(modal));
-  modal.querySelector("#migracao-iniciar").addEventListener("click", async (evento) => {
+
+  modal.querySelector("#migracao-enviar")?.addEventListener("click", async (evento) => {
+    const botaoEnviar = evento.currentTarget;
+    const campo = modal.querySelector("#migracao-arquivo");
+    const arquivo = campo?.files?.[0];
+    if (!arquivo) {
+      avisar("Escolha o arquivo do sistema antigo primeiro", "erro");
+      return;
+    }
+    botaoEnviar.disabled = true;
+    try {
+      const { lote_id: loteId } = await api.enviarArquivo("/migracao/enviar", arquivo, {
+        aoProgredir: (fracao) => situacao(`Enviando ${arquivo.name} — ${Math.round(fracao * 100)}%`),
+      });
+      situacao("Arquivo recebido. Copiando…");
+      esconderEscolhas();
+      await acompanhar(modal, loteId);
+    } catch (erro) {
+      botaoEnviar.disabled = false;
+      situacao("");
+      avisar(mensagemDeErro(erro), "erro");
+    }
+  });
+
+  modal.querySelector("#migracao-iniciar")?.addEventListener("click", async (evento) => {
     const iniciar = evento.currentTarget;
     iniciar.disabled = true;
     try {
       // `pedir`, e não `enviar`: sem internet isto não pode ir pra fila e
       // disparar sozinho horas depois.
       const { lote_id: loteId } = await api.pedir("POST", "/migracao/passo-1");
-      iniciar.hidden = true;
+      esconderEscolhas();
       await acompanhar(modal, loteId);
     } catch (erro) {
       iniciar.disabled = false;

@@ -20,8 +20,12 @@ pydantic-settings==2.15.0
 # --- autenticação ---------------------------------------------------------
 PyJWT==2.13.0
 
-# Saíram daqui de propósito:
-#   bcrypt            — o sistema não tem senha; a chave de acesso é SHA-256
-#                       (app/seguranca.py explica por quê). Ainda instalado,
-#                       exigia um compilador Rust no build à toa.
-#   python-multipart  — só serve pra formulário e upload, e nenhuma rota usa.
+# --- envio de arquivo -----------------------------------------------------
+# É ele que o FastAPI usa pra receber o banco do sistema antigo pela tela
+# (`rotas/migracao.py`). Sai junto com a migração, quando ela acabar.
+python-multipart==0.0.32
+
+# Saiu daqui de propósito:
+#   bcrypt  — o sistema não tem senha; a chave de acesso é SHA-256
+#             (app/seguranca.py explica por quê). Ainda instalado, exigia um
+#             compilador Rust no build à toa.

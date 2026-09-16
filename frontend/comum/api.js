@@ -233,6 +233,43 @@ export async function enviar(metodo, caminho, corpo = null, { rotulo } = {}) {
   }
 }
 
+/**
+ * Manda um arquivo (multipart). Usado pela migração: o dono escolhe o banco do
+ * sistema antigo e ele sobe pro servidor.
+ *
+ * Não passa pelo `pedir` porque aqui o corpo não é JSON, e não passa pela fila
+ * offline porque um arquivo de centenas de megabytes não cabe guardado no
+ * navegador esperando a internet voltar.
+ *
+ * @param {(fracao: number) => void} [aoProgredir]  0 a 1, enquanto sobe.
+ */
+export function enviarArquivo(caminho, arquivo, { campo = "arquivo", aoProgredir } = {}) {
+  if (!sessao) return Promise.reject(new ErroApi(401, "Sem sessão"));
+
+  return new Promise((resolver, rejeitar) => {
+    // XMLHttpRequest, e não fetch: é o único que avisa quanto já subiu, e numa
+    // conexão de loja um envio de 200 MB sem barra de progresso parece travado.
+    const pedido = new XMLHttpRequest();
+    pedido.open("POST", caminho);
+    pedido.setRequestHeader("Authorization", `Bearer ${sessao.acesso}`);
+
+    pedido.upload.addEventListener("progress", (evento) => {
+      if (evento.lengthComputable && aoProgredir) aoProgredir(evento.loaded / evento.total);
+    });
+    pedido.addEventListener("load", () => {
+      const dados = pedido.responseText ? _json(pedido.responseText) : null;
+      if (pedido.status >= 200 && pedido.status < 300) resolver(dados);
+      else rejeitar(new ErroApi(pedido.status, _mensagem(dados, { status: pedido.status }), dados));
+    });
+    pedido.addEventListener("error", () => rejeitar(new ErroRede(new Error("envio interrompido"))));
+    pedido.addEventListener("abort", () => rejeitar(new ErroRede(new Error("envio cancelado"))));
+
+    const corpo = new FormData();
+    corpo.append(campo, arquivo, arquivo.name);
+    pedido.send(corpo);
+  });
+}
+
 const jaAquecidos = new Set();
 
 /**

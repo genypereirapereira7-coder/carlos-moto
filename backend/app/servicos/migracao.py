@@ -21,6 +21,7 @@ Origens que ele sabe abrir:
     .fdb .gdb                  Firebird               (pip install firebird-driver)
     .dbf, ou pasta de .dbf     dBase, Clipper, FoxPro (pip install dbfread)
     .csv .txt, ou pasta        planilha exportada
+    .zip                       a pasta inteira do sistema antigo, compactada
     odbc:<string de conexão>   MySQL, SQL Server, qualquer banco com driver ODBC
 
 Não importa nada do app, de propósito: é um arquivo que dá pra copiar sozinho
@@ -122,6 +123,8 @@ def abrir_sistema_antigo(origem: str) -> tuple[str, Iterator[TabelaAntiga]]:
         return "dbf", iter([_ler_dbf(caminho)])
     if sufixo in {".csv", ".txt"}:
         return "csv", iter([_ler_csv(caminho)])
+    if sufixo == ".zip":
+        return "zip", _ler_zip(caminho)
     raise ValueError(f"Não sei abrir este formato de sistema antigo: {caminho.name}")
 
 
@@ -237,6 +240,44 @@ def _ler_csv(arquivo: Path) -> TabelaAntiga:
     # endereço — ganha coluna extra, em vez de perder o que sobrou.
     extras = [f"coluna_extra_{i}" for i in range(len(cabecalho) + 1, largura + 1)]
     return TabelaAntiga(arquivo.stem, [*cabecalho, *extras], iter(corpo))
+
+
+def _ler_zip(arquivo: Path) -> Iterator[TabelaAntiga]:
+    """A pasta do sistema antigo, compactada — é assim que ela chega pela
+    internet quando o cliente manda pelo navegador.
+
+    Descompacta num lugar temporário e lê de lá; no fim apaga. O conteúdo é o
+    banco do cliente: não pode ficar sobrando no disco do servidor.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+
+    temporaria = Path(tempfile.mkdtemp(prefix="migracao-zip-"))
+    try:
+        with zipfile.ZipFile(arquivo) as zip_:
+            for membro in zip_.infolist():
+                if membro.is_dir():
+                    continue
+                # Um .zip pode trazer nomes como "../../etc/senha" e escrever
+                # fora da pasta. Só o nome do arquivo entra, sem caminho.
+                nome = Path(membro.filename).name
+                if not nome or nome.startswith("."):
+                    continue
+                with zip_.open(membro) as origem, open(temporaria / nome, "wb") as destino:
+                    shutil.copyfileobj(origem, destino)
+
+        # De dentro do zip pode vir um banco só (um .mdb, um .db) ou a pasta
+        # inteira de .dbf — os dois casos caem no leitor de pasta.
+        arquivos = sorted(p for p in temporaria.iterdir() if p.is_file())
+        unico = [p for p in arquivos if p.suffix.lower() in {".db", ".sqlite", ".sqlite3", ".mdb", ".accdb", ".fdb", ".gdb"}]
+        if len(unico) == 1 and len(arquivos) == 1:
+            _, tabelas = abrir_sistema_antigo(str(unico[0]))
+            yield from tabelas
+        else:
+            yield from _ler_pasta(temporaria)
+    finally:
+        shutil.rmtree(temporaria, ignore_errors=True)
 
 
 def _ler_pasta(pasta: Path) -> Iterator[TabelaAntiga]:
