@@ -34,6 +34,23 @@ antigo" → Run workflow), porque executável de Windows só se compila no
 Windows. O endereço do sistema vai embutido; a chave de acesso não — um `.exe`
 com a chave dentro abre o sistema pra quem pegar o arquivo.
 
+### O jeito mais fácil pro cliente: o programa já com a chave
+
+O `MigrarCarlosMoto.exe` sozinho pede a chave. Se você quiser que o cliente
+**só abra o programa**, sem digitar nada, ponha um arquivo `chave.txt` ao lado
+do `.exe` (mesmo pendrive, mesma pasta) com a chave de acesso dentro. O
+programa lê dali.
+
+Ao abrir, ele avisa o que vai fazer e dá 5 segundos pra fechar — ele não roda
+escondido; o cliente vê a cópia acontecer. Consentimento é a pessoa ver, não
+um formulário.
+
+**Regra de segurança:** gere uma chave só pra isso no painel (Chave e
+aparelhos) e revogue-a assim que a migração terminar. A chave num `chave.txt`
+abre o sistema pra quem pegar o pendrive — ela tem que morrer logo. E nunca
+embuta a chave no próprio `.exe`: o executável passa por gente e por log, o
+`chave.txt` você apaga.
+
 **3. O servidor lê o disco direto.** Só quando ele está rodando no computador
 onde o sistema antigo está. É o caminho pro Access e pro Firebird, e pra banco
 grande demais pra subir pela internet da loja. Sem

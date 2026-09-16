@@ -34,6 +34,23 @@ from pathlib import Path
 ENDERECO = os.environ.get("CARLOSMOTO_ENDERECO", "")
 CHAVE = os.environ.get("CARLOSMOTO_CHAVE", "")
 
+
+def _chave_do_lado() -> str:
+    """A chave num `chave.txt` ao lado do programa.
+
+    É como o dono entrega o programa pronto pro cliente: os dois arquivos no
+    mesmo pendrive. O cliente só abre o `.exe`. A chave não vai embutida no
+    executável — quem pegasse o arquivo abriria o sistema — e não passa pelo
+    build. Fica num arquivo separado, que se apaga depois da migração.
+    """
+    ao_lado = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) \
+        else Path(__file__).resolve().parent
+    for nome in ("chave.txt", "CHAVE.txt"):
+        arquivo = ao_lado / nome
+        if arquivo.is_file():
+            return arquivo.read_text(encoding="utf-8").strip()
+    return ""
+
 # O motor da migração vive no backend do projeto; o empacotador leva junto.
 _AQUI = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 for candidato in (_AQUI / "backend", _AQUI.parent / "backend"):
@@ -97,7 +114,21 @@ def main() -> int:
 
     if not ENDERECO:
         ENDERECO = input("  Endereço do sistema novo: ").strip()
-    if not CHAVE:
+
+    CHAVE = CHAVE or _chave_do_lado()
+
+    if CHAVE:
+        # Chave embutida pelo dono da loja: o cliente não digita nada. O
+        # programa continua mostrando cada passo — ele não roda escondido.
+        diga("  Este programa vai COPIAR os dados do seu sistema antigo para o")
+        diga("  Carlos Moto, na internet. Ele NAO altera o sistema antigo: so le.")
+        diga()
+        diga("  Comecando em 5 segundos. Feche esta janela agora se nao quiser.")
+        for restam in range(5, 0, -1):
+            diga(f"    {restam}...")
+            time.sleep(1)
+        diga()
+    else:
         CHAVE = input("  Chave de acesso: ").strip()
 
     diga("  Entrando no sistema novo...")
