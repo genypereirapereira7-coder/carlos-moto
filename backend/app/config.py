@@ -80,6 +80,12 @@ class Config(BaseSettings):
     # ambiente de teste com chave conhecida.
     chave_dono: str = ""
 
+    # Migração do sistema antigo (PROVISÓRIO). Só preenchidas no computador
+    # do cliente, onde o sistema antigo está; na nuvem ficam vazias e o
+    # botão nem aparece.
+    migracao_origem: str = ""
+    migracao_destino: str = ""
+
     # Fuso da loja. O banco guarda tudo em UTC, mas "hoje" — o dia em que uma
     # parcela passa a estar atrasada, o dia que fecha o caixa — é o dia no
     # relógio do balcão. Sem isto, depois das 21h de Brasília o UTC já virou

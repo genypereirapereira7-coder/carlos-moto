@@ -20,6 +20,7 @@ from app.rotas import (
     clientes,
     financeiro,
     historico,
+    migracao,
     motos,
     parcelas,
     relatorios,
@@ -136,6 +137,7 @@ app.include_router(clientes.rotas)
 app.include_router(parcelas.rotas)
 app.include_router(financeiro.rotas)
 app.include_router(historico.rotas)
+app.include_router(migracao.rotas)
 app.include_router(relatorios.rotas)
 app.include_router(ws.rotas)
 

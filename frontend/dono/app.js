@@ -6,6 +6,7 @@ import { avisar } from "./ui.js";
 import { atualizarContador, sincronizar } from "./fila-ui.js";
 import { abrirPainelDeAcesso } from "./acesso.js";
 import * as instalar from "./instalar.js";
+import { oferecerMigracao } from "./migracao.js";
 import { marcarErro, limparErros } from "./validacao.js";
 import { renderMotos } from "./telas/motos.js";
 import { renderClientes } from "./telas/clientes.js";
@@ -85,6 +86,8 @@ function mostrarApp(nome) {
   atualizarContador();
   sincronizar();
   oferecerInstalacao();
+  // O botão só aparece onde o sistema antigo está — ver `migracao.js`.
+  oferecerMigracao();
 }
 
 function mostrarLogin() {
