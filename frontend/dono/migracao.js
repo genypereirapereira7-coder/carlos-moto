@@ -108,11 +108,34 @@ botao.addEventListener("click", async () => {
   } catch { /* na nuvem não acha nada; o seletor entra no lugar */ }
   if (!modal.isConnected) return;
 
+  // Quando a varredura não acha nada, quem está olhando abriu o sistema pela
+  // internet — e aí nenhuma página pode ler o disco dela. O que a página pode
+  // fazer é entregar o programa que lê: ele roda na máquina, acha sozinho e
+  // copia. É o "clica e clona" possível.
+  const programa = achados.length ? "" : `
+    <h3 class="secao-seguinte">Clonar sem escolher nada</h3>
+    <p class="fraco">Esta página não consegue varrer o disco deste computador — nenhum site
+      consegue, e é o que impede qualquer site de ler os seus documentos. Quem varre é um
+      programa rodando aqui dentro:</p>
+    <ol class="passos-instalar">
+      <li><span>Baixe o programa abaixo e abra com dois cliques.</span></li>
+      <li><span>O Windows vai avisar que é um programa desconhecido:
+        <strong>Mais informações</strong> → <strong>Executar assim mesmo</strong>.</span></li>
+      <li><span>Cole a chave de acesso. Ele acha o sistema antigo sozinho, copia e avisa
+        quando terminar.</span></li>
+    </ol>
+    <div class="acoes-modal">
+      <a class="botao" href="./MigrarCarlosMoto.exe" download="MigrarCarlosMoto.exe">
+        Baixar o clonador (Windows)
+      </a>
+    </div>`;
+
   const seletor = estado.envio ? `
+    ${programa}
     <p class="fraco" id="migracao-alternativa">
       ${achados.length
         ? 'Não é nenhum desses? <button type="button" class="link" id="migracao-mostrar-envio">Enviar o arquivo</button>'
-        : "Este servidor não achou nenhum sistema antigo no disco — é o que acontece quando você abre pela internet. Escolha o arquivo do sistema antigo no seu computador:"}
+        : "Ou, se preferir fazer por aqui mesmo, aponte a pasta do sistema antigo:"}
     </p>
     <div id="migracao-envio" ${achados.length ? "hidden" : ""}>
       <label class="campo">A pasta inteira do sistema antigo <span class="fraco">(o jeito bom)</span>

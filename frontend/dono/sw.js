@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v28";
+const VERSAO = "v29";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -44,6 +44,10 @@ const CASCA = [
   "../comum/ws.js",
   "../comum/estilo.css",
 ];
+
+// O clonador tem 11 MB e é baixado uma vez na vida: guardar no cache do
+// navegador seria ocupar o disco de todo mundo à toa.
+const FORA_DO_CACHE = ["/dono/MigrarCarlosMoto.exe"];
 
 const CAMINHOS_API = [
   "/auth", "/motos", "/vendas", "/clientes", "/parcelas", "/financeiro",
@@ -88,6 +92,7 @@ self.addEventListener("fetch", (evento) => {
   if (CAMINHOS_API.some((p) => url.pathname === p || url.pathname.startsWith(`${p}/`))) {
     return;
   }
+  if (FORA_DO_CACHE.includes(url.pathname)) return;
 
   if (request.mode === "navigate") {
     evento.respondWith(
