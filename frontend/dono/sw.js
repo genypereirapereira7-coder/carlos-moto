@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v27";
+const VERSAO = "v28";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [

@@ -160,11 +160,15 @@ async def ver_lote(lote_id: int, _: SoDono):
 
 
 @rotas.post("/enviar", status_code=status.HTTP_202_ACCEPTED)
-async def enviar_sistema_antigo(_: SoDono, arquivo: UploadFile):
-    """Recebe o banco do sistema antigo escolhido na tela e copia pro espelho.
+async def enviar_sistema_antigo(_: SoDono, arquivos: list[UploadFile]):
+    """Recebe o sistema antigo pela tela e copia pro espelho.
 
-    O arquivo é gravado em pedaços, e não lido de uma vez: um banco de 300 MB
-    lido inteiro na memória derruba o servidor.
+    Aceita **um arquivo ou a pasta inteira**. Apontar a pasta é o caminho bom:
+    o dono não precisa saber qual dos 47 arquivos é o banco — o que não for
+    dado (programa, ajuda, imagem) é descartado aqui, sem reclamar.
+
+    Cada arquivo é gravado em pedaços, e não lido de uma vez: um banco de
+    300 MB lido inteiro na memória derruba o servidor.
     """
     global _tarefa
     destino = _destino()
@@ -173,49 +177,81 @@ async def enviar_sistema_antigo(_: SoDono, arquivo: UploadFile):
     if _rodando():
         raise HTTPException(status.HTTP_409_CONFLICT, "Já tem uma cópia rodando. Espere ela terminar.")
 
-    nome = Path(arquivo.filename or "sistema-antigo").name
-    sufixo = Path(nome).suffix.lower()
-    if sufixo in PRECISAM_DE_DRIVER:
-        raise HTTPException(
-            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            f"Arquivo {sufixo} (Access ou Firebird) precisa de um programa que só existe no "
-            "computador onde o sistema antigo está. A cópia desse tipo tem que ser feita lá.",
-        )
-    if sufixo not in ACEITOS:
-        raise HTTPException(
-            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            f"Não sei abrir {sufixo or 'arquivo sem extensão'}. Aceito: {', '.join(sorted(ACEITOS))}. "
-            "A pasta inteira do sistema antigo pode vir num .zip.",
-        )
-
     pasta = Path(tempfile.mkdtemp(prefix="migracao-envio-"))
-    caminho = pasta / nome
+    guardados: list[Path] = []
+    precisavam_de_driver: list[str] = []
     tamanho = 0
     try:
-        with caminho.open("wb") as saida:
-            while pedaco := await arquivo.read(PEDACO):
-                tamanho += len(pedaco)
-                if tamanho > LIMITE_BYTES:
-                    raise HTTPException(
-                        status.HTTP_413_CONTENT_TOO_LARGE,
-                        f"Arquivo maior que {LIMITE_BYTES // (1024 * 1024)} MB. "
-                        "Um desse tamanho é melhor copiar no próprio computador do cliente.",
-                    )
-                saida.write(pedaco)
+        for arquivo in arquivos:
+            nome = Path(arquivo.filename or "sistema-antigo").name
+            sufixo = Path(nome).suffix.lower()
+            if sufixo in PRECISAM_DE_DRIVER:
+                precisavam_de_driver.append(nome)
+                continue
+            if sufixo not in ACEITOS:
+                continue  # programa, ajuda, imagem: a pasta vem cheia disso
+
+            caminho = pasta / nome
+            with caminho.open("wb") as saida:
+                while pedaco := await arquivo.read(PEDACO):
+                    tamanho += len(pedaco)
+                    if tamanho > LIMITE_BYTES:
+                        raise HTTPException(
+                            status.HTTP_413_CONTENT_TOO_LARGE,
+                            f"O envio passou de {LIMITE_BYTES // (1024 * 1024)} MB. "
+                            "Desse tamanho é melhor copiar no próprio computador do cliente.",
+                        )
+                    saida.write(pedaco)
+            guardados.append(caminho)
+
+        if not guardados:
+            shutil.rmtree(pasta, ignore_errors=True)
+            if precisavam_de_driver:
+                raise HTTPException(
+                    status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    f"{', '.join(precisavam_de_driver[:3])} é Access ou Firebird, e precisa de um "
+                    "programa que só existe no computador onde o sistema antigo está. "
+                    "A cópia desse tipo tem que ser feita lá.",
+                )
+            raise HTTPException(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                f"Nenhum arquivo que eu saiba abrir. Aceito: {', '.join(sorted(ACEITOS))}.",
+            )
     except Exception:
         shutil.rmtree(pasta, ignore_errors=True)
         raise
 
+    # Um arquivo só: lê ele. Vários: lê a pasta inteira, de uma vez.
+    origem = guardados[0] if len(guardados) == 1 else pasta
+    rotulo = guardados[0].name if len(guardados) == 1 else f"{len(guardados)} arquivos da pasta"
+
     # O lote guarda o nome que o dono reconhece; a leitura usa o caminho temporário.
-    lote_id = await migracao.abrir_lote(destino, f"enviado: {nome}")
-    _tarefa = asyncio.create_task(_copiar_e_apagar(destino, caminho, lote_id))
-    _tarefa.add_done_callback(_registrar_fim)
-    return {"lote_id": lote_id, "arquivo": nome, "bytes": tamanho}
-
-
-async def _copiar_e_apagar(destino: str, caminho: Path, lote_id: int) -> dict:
     try:
-        return await migracao.executar_passo_1(destino, str(caminho), lote_id)
+        lote_id = await migracao.abrir_lote(destino, f"enviado: {rotulo}")
+    except Exception as erro:
+        # Sem isto, banco da nuvem fora do ar vira erro cru na cara do cliente,
+        # depois de ele ter esperado o arquivo inteiro subir. O `/passo-1` já
+        # tratava; aqui tinha passado.
+        shutil.rmtree(pasta, ignore_errors=True)
+        log.warning("migração: banco da nuvem não respondeu no envio", exc_info=True)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"O arquivo chegou, mas não deu pra falar com o banco da nuvem ({type(erro).__name__}).",
+        ) from None
+    _tarefa = asyncio.create_task(_copiar_e_apagar(destino, origem, pasta, lote_id))
+    _tarefa.add_done_callback(_registrar_fim)
+    return {
+        "lote_id": lote_id,
+        "arquivos": [caminho.name for caminho in guardados],
+        "ignorados": len(arquivos) - len(guardados),
+        "precisam_de_driver": precisavam_de_driver,
+        "bytes": tamanho,
+    }
+
+
+async def _copiar_e_apagar(destino: str, origem: Path, pasta: Path, lote_id: int) -> dict:
+    try:
+        return await migracao.executar_passo_1(destino, str(origem), lote_id)
     finally:
         # O banco do cliente não fica guardado no servidor depois da cópia.
-        shutil.rmtree(caminho.parent, ignore_errors=True)
+        shutil.rmtree(pasta, ignore_errors=True)

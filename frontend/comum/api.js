@@ -241,9 +241,11 @@ export async function enviar(metodo, caminho, corpo = null, { rotulo } = {}) {
  * offline porque um arquivo de centenas de megabytes não cabe guardado no
  * navegador esperando a internet voltar.
  *
+ * Aceita um `File` ou uma lista deles (a pasta inteira).
+ *
  * @param {(fracao: number) => void} [aoProgredir]  0 a 1, enquanto sobe.
  */
-export function enviarArquivo(caminho, arquivo, { campo = "arquivo", aoProgredir } = {}) {
+export function enviarArquivo(caminho, arquivo, { campo = "arquivos", aoProgredir } = {}) {
   if (!sessao) return Promise.reject(new ErroApi(401, "Sem sessão"));
 
   return new Promise((resolver, rejeitar) => {
@@ -265,7 +267,10 @@ export function enviarArquivo(caminho, arquivo, { campo = "arquivo", aoProgredir
     pedido.addEventListener("abort", () => rejeitar(new ErroRede(new Error("envio cancelado"))));
 
     const corpo = new FormData();
-    corpo.append(campo, arquivo, arquivo.name);
+    // Um arquivo ou a pasta inteira: o servidor recebe os dois do mesmo jeito.
+    for (const um of Array.isArray(arquivo) || arquivo instanceof FileList ? arquivo : [arquivo]) {
+      corpo.append(campo, um, um.name);
+    }
     pedido.send(corpo);
   });
 }

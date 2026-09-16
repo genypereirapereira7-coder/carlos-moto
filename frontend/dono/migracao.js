@@ -115,13 +115,17 @@ botao.addEventListener("click", async () => {
         : "Este servidor não achou nenhum sistema antigo no disco — é o que acontece quando você abre pela internet. Escolha o arquivo do sistema antigo no seu computador:"}
     </p>
     <div id="migracao-envio" ${achados.length ? "hidden" : ""}>
-      <label class="campo">Arquivo do sistema antigo
-        <input type="file" id="migracao-arquivo" accept="${(estado.formatos || []).join(",")}" />
+      <label class="campo">A pasta inteira do sistema antigo <span class="fraco">(o jeito bom)</span>
+        <input type="file" id="migracao-pasta" webkitdirectory directory multiple />
       </label>
-      <p class="fraco">Aceita ${(estado.formatos || []).join(", ")}, até ${estado.limite_mb || 500} MB.
-        Se for uma pasta com vários arquivos, compacte em .zip.</p>
+      <label class="campo">Ou um arquivo só, se você souber qual é
+        <input type="file" id="migracao-arquivo" accept="${(estado.formatos || []).join(",")}" multiple />
+      </label>
+      <p class="fraco" id="migracao-resumo">Aponte a pasta onde o sistema antigo está instalado.
+        O que não for banco de dados (programa, ajuda, imagem) é descartado sozinho — até
+        ${estado.limite_mb || 500} MB no total.</p>
       <div class="acoes-modal">
-        <button class="botao" id="migracao-enviar" type="button">Enviar e copiar</button>
+        <button class="botao" id="migracao-enviar" type="button">Clonar os dados</button>
       </div>
     </div>` : "";
 
@@ -143,6 +147,33 @@ botao.addEventListener("click", async () => {
     ${seletor}`;
 
   const esconderEscolhas = () => { escolhas.hidden = true; };
+
+  // Da pasta inteira, só o que é banco de dados. Uma pasta de sistema antigo
+  // tem dezenas de .exe, .dll e ajuda — mandar tudo seria megabytes à toa, e o
+  // servidor descartaria do mesmo jeito.
+  const formatos = (estado.formatos || []).map((f) => f.toLowerCase());
+  const eBanco = (arquivo) => formatos.some((f) => arquivo.name.toLowerCase().endsWith(f));
+
+  function selecionados() {
+    const daPasta = [...(modal.querySelector("#migracao-pasta")?.files || [])];
+    const soltos = [...(modal.querySelector("#migracao-arquivo")?.files || [])];
+    return [...daPasta, ...soltos].filter(eBanco);
+  }
+
+  // Assim que a pasta é apontada, a tela diz o que vai mandar — antes de mandar.
+  escolhas.addEventListener("change", (evento) => {
+    if (!evento.target.matches("#migracao-pasta, #migracao-arquivo")) return;
+    const total = [...(modal.querySelector("#migracao-pasta")?.files || []),
+                   ...(modal.querySelector("#migracao-arquivo")?.files || [])].length;
+    const bons = selecionados();
+    const bytes = bons.reduce((soma, a) => soma + a.size, 0);
+    const resumo = modal.querySelector("#migracao-resumo");
+    if (!resumo) return;
+    resumo.textContent = bons.length
+      ? `Achei ${bons.length} arquivo(s) de banco de dados em ${total}, somando ${tamanho(bytes)}. `
+        + "O resto (programa, ajuda, imagem) não vai."
+      : `Nenhum dos ${total} arquivos é banco de dados que eu saiba abrir.`;
+  });
 
   // ------------------------------------------------------- copiar o achado
   escolhas.addEventListener("click", async (evento) => {
@@ -173,15 +204,16 @@ botao.addEventListener("click", async () => {
 
     const enviar = evento.target.closest("#migracao-enviar");
     if (enviar) {
-      const arquivo = modal.querySelector("#migracao-arquivo")?.files?.[0];
-      if (!arquivo) {
-        avisar("Escolha o arquivo do sistema antigo primeiro", "erro");
+      const escolhidos = selecionados();
+      if (!escolhidos.length) {
+        avisar("Aponte a pasta do sistema antigo primeiro", "erro");
         return;
       }
       enviar.disabled = true;
+      const rotulo = escolhidos.length === 1 ? escolhidos[0].name : `${escolhidos.length} arquivos`;
       try {
-        const { lote_id: loteId } = await api.enviarArquivo("/migracao/enviar", arquivo, {
-          aoProgredir: (fracao) => situacao(`Enviando ${arquivo.name} — ${Math.round(fracao * 100)}%`),
+        const { lote_id: loteId } = await api.enviarArquivo("/migracao/enviar", escolhidos, {
+          aoProgredir: (fracao) => situacao(`Enviando ${rotulo} — ${Math.round(fracao * 100)}%`),
         });
         situacao("Arquivo recebido. Copiando…");
         esconderEscolhas();

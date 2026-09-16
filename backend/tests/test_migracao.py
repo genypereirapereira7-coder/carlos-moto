@@ -13,13 +13,35 @@ from app.rotas import migracao as rota
 
 @pytest.fixture
 def com_destino(monkeypatch):
-    """Finge que existe um banco na nuvem pra receber a cópia."""
+    """Finge que existe um banco na nuvem pra receber a cópia.
+
+    O motor também vira dublê: sem isso o teste tenta resolver o nome do banco
+    de mentira e falha na rede, em vez de medir o que interessa — quem pode
+    mandar, o que pode mandar e o que a peneira descarta.
+    """
+    from app.servicos import migracao as motor
+
+    async def abrir_lote_falso(destino, origem):
+        return 1
+
+    async def copiar_falso(*args, **kwargs):
+        return {"lote_id": 1, "situacao": "CONCLUIDO", "tabelas": {}, "erros": []}
+
     monkeypatch.setattr(rota, "_destino", lambda: "postgresql://nuvem/de-mentira")
     monkeypatch.setattr(rota, "_rodando", lambda: False)
+    monkeypatch.setattr(motor, "abrir_lote", abrir_lote_falso)
+    monkeypatch.setattr(motor, "executar_passo_1", copiar_falso)
 
 
 def _arquivo(nome: str, tamanho: int = 64):
-    return {"arquivo": (nome, b"x" * tamanho, "application/octet-stream")}
+    """Um arquivo, no formato que o formulário manda. O campo é plural porque a
+    rota aceita a pasta inteira — um arquivo só é uma lista de um."""
+    return [("arquivos", (nome, b"x" * tamanho, "application/octet-stream"))]
+
+
+def _pasta(*nomes: str):
+    """Vários arquivos de uma vez, como quando o dono aponta a pasta."""
+    return [("arquivos", (nome, b"x" * 64, "application/octet-stream")) for nome in nomes]
 
 
 async def test_estado_diz_que_da_pra_enviar_da_nuvem(cliente, dados, entrar, com_destino):
@@ -53,6 +75,30 @@ async def test_formato_desconhecido_diz_o_que_aceita(cliente, dados, entrar, com
     resposta = await cliente.post("/migracao/enviar", files=_arquivo("planilha.xlsx"), headers=cabecalho)
     assert resposta.status_code == 415
     assert ".zip" in resposta.json()["detail"]
+
+
+async def test_pasta_inteira_descarta_o_que_nao_e_banco(cliente, dados, entrar, com_destino):
+    """O dono aponta a pasta do sistema antigo, que vem cheia de programa e
+    ajuda. Recusar por causa deles seria obrigá-lo a saber qual é o banco — que
+    é exatamente o que ele não sabe."""
+    cabecalho = await entrar(dados["carlos"].id)
+    resposta = await cliente.post(
+        "/migracao/enviar",
+        files=_pasta("SISTEMA.EXE", "CLIENTES.DBF", "leiame.txt", "logo.png", "CONTRATOS.DBF"),
+        headers=cabecalho,
+    )
+    assert resposta.status_code == 202
+    corpo = resposta.json()
+    assert sorted(corpo["arquivos"]) == ["CLIENTES.DBF", "CONTRATOS.DBF", "leiame.txt"]
+    assert corpo["ignorados"] == 2   # o .exe e a imagem ficaram de fora
+
+
+async def test_pasta_so_com_access_explica_o_motivo(cliente, dados, entrar, com_destino):
+    cabecalho = await entrar(dados["carlos"].id)
+    resposta = await cliente.post(
+        "/migracao/enviar", files=_pasta("SISTEMA.EXE", "dados.mdb"), headers=cabecalho)
+    assert resposta.status_code == 415
+    assert "computador" in resposta.json()["detail"]
 
 
 async def test_arquivo_grande_demais_e_cortado_no_meio_do_envio(cliente, dados, entrar, com_destino, monkeypatch):
@@ -167,3 +213,21 @@ def test_pasta_de_dbf_conta_como_um_sistema_so(tmp_path):
     assert achados[0]["tipo"] == "dbf"
     assert achados[0]["arquivos"] == 3
     assert achados[0]["caminho"] == str(tmp_path)
+
+
+async def test_banco_da_nuvem_fora_do_ar_no_envio(cliente, dados, entrar, com_destino, monkeypatch):
+    """O arquivo já subiu inteiro e o banco não responde.
+
+    Tem que sair um recado explicando, e não o erro cru de rede — que foi o que
+    saía antes: o `/passo-1` tratava isso e o `/enviar` tinha passado batido.
+    """
+    from app.servicos import migracao as motor
+
+    async def nao_responde(*args, **kwargs):
+        raise OSError("nome do banco não resolve")
+
+    monkeypatch.setattr(motor, "abrir_lote", nao_responde)
+    cabecalho = await entrar(dados["carlos"].id)
+    resposta = await cliente.post("/migracao/enviar", files=_arquivo("dados.db"), headers=cabecalho)
+    assert resposta.status_code == 502
+    assert "nuvem" in resposta.json()["detail"]

@@ -283,14 +283,23 @@ def _ler_zip(arquivo: Path) -> Iterator[TabelaAntiga]:
 
 
 def _ler_pasta(pasta: Path) -> Iterator[TabelaAntiga]:
-    # Sistema de dBase/Clipper guarda uma tabela por arquivo, tudo numa pasta;
-    # exportação de planilha costuma vir do mesmo jeito.
+    """Tudo que for banco dentro da pasta, num lote só.
+
+    É o que chega quando o dono aponta a pasta inteira do sistema antigo: lá
+    dentro vem o banco junto com programa, ajuda e imagem. Só o que é dado
+    passa por aqui; o resto é ignorado em silêncio.
+    """
     for arquivo in sorted(pasta.iterdir()):
+        if not arquivo.is_file():
+            continue
         sufixo = arquivo.suffix.lower()
         if sufixo == ".dbf":
             yield _ler_dbf(arquivo)
         elif sufixo in {".csv", ".txt"}:
             yield _ler_csv(arquivo)
+        elif sufixo in {".db", ".sqlite", ".sqlite3"}:
+            # Um SQLite dentro da pasta traz as tabelas dele pro mesmo lote.
+            yield from _ler_sqlite(arquivo)
 
 
 # ------------------------------------------- achar o sistema antigo sozinho
