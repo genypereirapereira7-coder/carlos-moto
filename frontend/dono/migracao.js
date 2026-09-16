@@ -128,6 +128,7 @@ botao.addEventListener("click", async () => {
   escolhas.innerHTML = `
     ${achados.length ? `
       <h3 class="secao-seguinte">Achei ${achados.length === 1 ? "o sistema antigo" : `${achados.length} possíveis sistemas antigos`} neste computador</h3>
+      ${achados[0].busca_incompleta ? '<p class="fraco">A busca parou antes de varrer o disco inteiro (disco grande ou lento). Se o sistema antigo não estiver na lista, use o envio de arquivo abaixo.</p>' : ""}
       <ul class="lista-fila">
         ${achados.map((a, i) => `
           <li>

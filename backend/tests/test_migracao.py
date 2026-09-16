@@ -120,3 +120,50 @@ async def test_sem_nada_configurado_e_sem_escolha_nao_copia(cliente, dados, entr
     resposta = await cliente.post("/migracao/passo-1", json={}, headers=cabecalho)
     assert resposta.status_code == 409
     assert "não achei" in resposta.json()["detail"].lower()
+
+
+# ------------------------------------------------ a varredura tem que parar
+
+def test_varredura_para_no_tempo_e_avisa(monkeypatch, tmp_path):
+    """O limite de tempo não é enfeite: no HD velho de uma loja a varredura
+    pode demorar minutos, e o dono fica olhando uma tela parada.
+
+    Aqui o limite vira zero, então ela para na primeira volta — e o que
+    importa é que o resultado venha marcado como incompleto. "Não achei nada"
+    e "parei no meio" são respostas diferentes.
+    """
+    from app.servicos import migracao as servico
+
+    (tmp_path / "CLIENTES.DBF").write_bytes(b"x" * 100)
+    monkeypatch.setattr(servico, "TEMPO_LIMITE_S", 0.0)
+
+    achados = servico.procurar_sistemas_antigos(raizes=[tmp_path])
+    assert achados == [] or all(a["busca_incompleta"] for a in achados)
+
+
+def test_varredura_respeita_o_teto_de_arquivos(monkeypatch, tmp_path):
+    """Mesma ideia pelo outro lado: disco gigante não pode virar varredura
+    infinita."""
+    from app.servicos import migracao as servico
+
+    for numero in range(30):
+        (tmp_path / f"tabela{numero}.dbf").write_bytes(b"x" * 10)
+    monkeypatch.setattr(servico, "TETO_DE_ARQUIVOS", 5)
+
+    achados = servico.procurar_sistemas_antigos(raizes=[tmp_path])
+    assert all(a["busca_incompleta"] for a in achados)
+
+
+def test_pasta_de_dbf_conta_como_um_sistema_so(tmp_path):
+    """Em dBase e Clipper cada tabela é um arquivo — o sistema é a pasta. A
+    lista tem que mostrar um candidato, não trinta."""
+    from app.servicos import migracao as servico
+
+    for nome in ("CLIENTES", "CONTRATOS", "TICKETS"):
+        (tmp_path / f"{nome}.DBF").write_bytes(b"x" * 100)
+
+    achados = servico.procurar_sistemas_antigos(raizes=[tmp_path])
+    assert len(achados) == 1
+    assert achados[0]["tipo"] == "dbf"
+    assert achados[0]["arquivos"] == 3
+    assert achados[0]["caminho"] == str(tmp_path)

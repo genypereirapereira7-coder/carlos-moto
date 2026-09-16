@@ -41,7 +41,9 @@ import json
 import os
 import re
 import sqlite3
+import time
 import unicodedata
+from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -305,6 +307,7 @@ IGNORAR = {
 
 PROFUNDIDADE = 4       # o bastante pra C:\Sistema\Dados\arquivo.dbf
 TETO_DE_ARQUIVOS = 40_000   # varredura tem que terminar rápido; não é backup
+TEMPO_LIMITE_S = 20.0       # e tem que terminar, ponto: HD velho de loja é lento e não avisa
 
 
 def _lugares_comuns() -> list[Path]:
@@ -313,6 +316,9 @@ def _lugares_comuns() -> list[Path]:
         candidatos = ["C:/", "C:/Program Files", "C:/Program Files (x86)", "C:/Sistemas",
                       "C:/Dados", "C:/Arquivos de Programas", "D:/",
                       Path.home() / "Desktop", Path.home() / "Documents"]
+        # Sistema de loja mora em pen drive, HD externo e segunda partição
+        # com a mesma frequência que no C:.
+        candidatos += [f"{letra}:/" for letra in "EFGHIJ"]
     else:
         candidatos = [Path.home() / "Desktop", Path.home() / "Documents", Path.home() / "Downloads"]
     return [Path(c) for c in candidatos if Path(c).is_dir()]
@@ -327,7 +333,8 @@ def _vale_olhar(pasta: Path) -> bool:
     return pasta.name.lower() not in IGNORAR and not pasta.name.startswith(".")
 
 
-def procurar_sistemas_antigos(raizes: list[Path] | None = None, limite: int = 20) -> list[dict]:
+def procurar_sistemas_antigos(raizes: list[Path] | None = None,
+                              limite_de_itens: int = 20) -> list[dict]:
     """Varre o disco atrás do sistema antigo e devolve os candidatos, do mais
     provável pro menos.
 
@@ -340,22 +347,32 @@ def procurar_sistemas_antigos(raizes: list[Path] | None = None, limite: int = 20
     """
     vistos = 0
     arquivos: list[Path] = []
-    for raiz in (raizes if raizes is not None else _lugares_comuns()):
-        pilha = [(raiz, 0)]
-        while pilha and vistos < TETO_DE_ARQUIVOS:
-            pasta, fundo = pilha.pop()
-            try:
-                for item in pasta.iterdir():
-                    vistos += 1
-                    if vistos >= TETO_DE_ARQUIVOS:
-                        break
-                    if item.is_dir():
-                        if fundo < PROFUNDIDADE and _vale_olhar(item):
-                            pilha.append((item, fundo + 1))
-                    elif item.suffix.lower() in EXTENSOES_DE_BANCO:
-                        arquivos.append(item)
-            except (PermissionError, OSError):
-                continue  # pasta do sistema, atalho quebrado: segue a vida
+    limite = time.monotonic() + TEMPO_LIMITE_S
+    parou_cedo = False
+
+    # Fila, e não pilha: varre por camada, do raso pro fundo. Com pilha, a
+    # varredura mergulha numa pasta qualquer e gasta o orçamento inteiro lá
+    # dentro antes de olhar a primeira camada do disco — que é justamente onde
+    # um sistema de balcão se instala.
+    fila = deque((raiz, 0) for raiz in (raizes if raizes is not None else _lugares_comuns()))
+    while fila:
+        if vistos >= TETO_DE_ARQUIVOS or time.monotonic() > limite:
+            parou_cedo = True
+            break
+        pasta, fundo = fila.popleft()
+        try:
+            for item in pasta.iterdir():
+                vistos += 1
+                if vistos >= TETO_DE_ARQUIVOS:
+                    parou_cedo = True
+                    break
+                if item.is_dir():
+                    if fundo < PROFUNDIDADE and _vale_olhar(item):
+                        fila.append((item, fundo + 1))
+                elif item.suffix.lower() in EXTENSOES_DE_BANCO:
+                    arquivos.append(item)
+        except (PermissionError, OSError):
+            continue  # pasta do sistema, atalho quebrado: segue a vida
 
     # Os .dbf de uma mesma pasta são um sistema só.
     pastas_dbf: dict[Path, list[Path]] = {}
@@ -391,7 +408,11 @@ def procurar_sistemas_antigos(raizes: list[Path] | None = None, limite: int = 20
 
     # Maior e mais recente primeiro: é o que está em uso.
     achados.sort(key=lambda a: (a["bytes"], a["modificado"]), reverse=True)
-    return achados[:limite]
+    for achado in achados[:limite_de_itens]:
+        # "Não achei nada" e "parei no meio" são coisas diferentes pra quem
+        # está esperando na frente da tela.
+        achado["busca_incompleta"] = parou_cedo
+    return achados[:limite_de_itens]
 
 
 # ------------------------------------------------------------ valores e nomes
