@@ -1,14 +1,14 @@
 /**
  * Botão PROVISÓRIO de migração do sistema antigo — sai depois da virada.
  *
- * Dois caminhos, e a janela mostra o que o servidor disser que dá:
+ * A ordem importa: **primeiro ele procura sozinho.** No computador onde o
+ * sistema antigo está, o servidor varre o disco, acha o banco e copia — um
+ * clique, sem ninguém escolher arquivo nenhum.
  *
- *   - **Enviar o arquivo**: o dono escolhe o banco do sistema antigo na tela e
- *     manda pra nuvem. Funciona de qualquer computador, sem instalar nada. O
- *     navegador não deixa um site vasculhar o disco, mas deixa a pessoa
- *     apontar um arquivo — e é essa a diferença.
- *   - **Copiar daqui**: o servidor lê o disco direto. Só existe quando ele
- *     está rodando no computador onde o sistema antigo está.
+ * Escolher arquivo só aparece quando não há o que procurar: é o caso de quem
+ * abre o sistema pela internet. Ali o navegador proíbe qualquer página de
+ * vasculhar o disco (e ainda bem), e a única saída é a pessoa apontar o
+ * arquivo de propósito.
  */
 
 import * as api from "../comum/api.js";
@@ -33,6 +33,11 @@ export async function oferecerMigracao() {
   } catch {
     botao.hidden = true;
   }
+}
+
+function tamanho(bytes) {
+  const mega = bytes / (1024 * 1024);
+  return mega >= 1 ? `${mega.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function desenharTabelas(lote) {
@@ -75,36 +80,15 @@ async function acompanhar(modal, loteId) {
   }
 }
 
-botao.addEventListener("click", () => {
+botao.addEventListener("click", async () => {
   const estado = estadoAtual || {};
-  const formatos = (estado.formatos || []).join(", ");
-
   const modal = abrirModal(`
     <div class="modal-topo"><h3>Migrar o sistema antigo — passo 1</h3></div>
     <p>Copia <strong>tudo</strong> do sistema antigo pra nuvem, do jeito que está: clientes,
       contratos, tickets, dados da empresa e qualquer outra tabela que existir.</p>
     <p class="fraco">O sistema antigo não é alterado, e nada entra ainda no sistema novo — a cópia
-      fica separada, esperando o passo 2. Pode repetir: cada envio gera um lote novo.</p>
-
-    ${estado.envio ? `
-      <h3 class="secao-seguinte">Enviar o arquivo do sistema antigo</h3>
-      <label class="campo">Escolha o arquivo no seu computador
-        <input type="file" id="migracao-arquivo" accept="${(estado.formatos || []).join(",")}" />
-      </label>
-      <p class="fraco">Aceita ${formatos || "os formatos do sistema antigo"}, até
-        ${estado.limite_mb || 500} MB. Se o sistema antigo for uma pasta com vários arquivos,
-        compacte a pasta em .zip e mande o .zip.</p>
-      <div class="acoes-modal">
-        <button class="botao" id="migracao-enviar" type="button">Enviar e copiar</button>
-      </div>` : ""}
-
-    ${estado.disponivel ? `
-      <h3 class="secao-seguinte">Ou copiar direto deste computador</h3>
-      <p class="fraco">O sistema antigo foi encontrado aqui: <strong>${escapar(estado.origem || "")}</strong></p>
-      <div class="acoes-modal">
-        <button class="botao botao--fantasma" id="migracao-iniciar" type="button">Copiar daqui</button>
-      </div>` : ""}
-
+      fica separada, esperando o passo 2. Pode repetir: cada cópia gera um lote novo.</p>
+    <div id="migracao-escolhas"><p class="fraco">Procurando o sistema antigo neste computador…</p></div>
     <p id="migracao-situacao" class="fraco"></p>
     <ul class="lista-fila" id="migracao-tabelas"></ul>
     <ul class="lista-simples" id="migracao-erros"></ul>
@@ -113,51 +97,99 @@ botao.addEventListener("click", () => {
     </div>
   `);
 
+  const escolhas = modal.querySelector("#migracao-escolhas");
   const situacao = (texto) => { modal.querySelector("#migracao-situacao").textContent = texto; };
-  const esconderEscolhas = () => {
-    for (const id of ["#migracao-enviar", "#migracao-iniciar", "#migracao-arquivo"]) {
-      const alvo = modal.querySelector(id);
-      if (alvo) alvo.closest(".acoes-modal, .campo")?.setAttribute("hidden", "");
-    }
-  };
-
   modal.querySelector("[data-fechar]").addEventListener("click", () => fecharModal(modal));
 
-  modal.querySelector("#migracao-enviar")?.addEventListener("click", async (evento) => {
-    const botaoEnviar = evento.currentTarget;
-    const campo = modal.querySelector("#migracao-arquivo");
-    const arquivo = campo?.files?.[0];
-    if (!arquivo) {
-      avisar("Escolha o arquivo do sistema antigo primeiro", "erro");
+  // ------------------------------------------------- procura, antes de tudo
+  let achados = [];
+  try {
+    achados = (await api.pedir("GET", "/migracao/procurar")).achados || [];
+  } catch { /* na nuvem não acha nada; o seletor entra no lugar */ }
+  if (!modal.isConnected) return;
+
+  const seletor = estado.envio ? `
+    <p class="fraco" id="migracao-alternativa">
+      ${achados.length
+        ? 'Não é nenhum desses? <button type="button" class="link" id="migracao-mostrar-envio">Enviar o arquivo</button>'
+        : "Este servidor não achou nenhum sistema antigo no disco — é o que acontece quando você abre pela internet. Escolha o arquivo do sistema antigo no seu computador:"}
+    </p>
+    <div id="migracao-envio" ${achados.length ? "hidden" : ""}>
+      <label class="campo">Arquivo do sistema antigo
+        <input type="file" id="migracao-arquivo" accept="${(estado.formatos || []).join(",")}" />
+      </label>
+      <p class="fraco">Aceita ${(estado.formatos || []).join(", ")}, até ${estado.limite_mb || 500} MB.
+        Se for uma pasta com vários arquivos, compacte em .zip.</p>
+      <div class="acoes-modal">
+        <button class="botao" id="migracao-enviar" type="button">Enviar e copiar</button>
+      </div>
+    </div>` : "";
+
+  escolhas.innerHTML = `
+    ${achados.length ? `
+      <h3 class="secao-seguinte">Achei ${achados.length === 1 ? "o sistema antigo" : `${achados.length} possíveis sistemas antigos`} neste computador</h3>
+      <ul class="lista-fila">
+        ${achados.map((a, i) => `
+          <li>
+            <div>
+              <strong>${escapar(a.nome)}</strong>${i === 0 ? ' <span class="selo selo--em-dia">mais provável</span>' : ""}
+              <p class="fraco">${escapar(a.tipo)} · ${tamanho(a.bytes)}${a.arquivos > 1 ? ` · ${a.arquivos} arquivos` : ""}
+                · mexido em ${escapar(a.modificado)}<br />${escapar(a.caminho)}</p>
+            </div>
+            <button class="botao botao--pequeno" data-copiar="${escapar(a.caminho)}" type="button">Copiar agora</button>
+          </li>`).join("")}
+      </ul>` : ""}
+    ${seletor}`;
+
+  const esconderEscolhas = () => { escolhas.hidden = true; };
+
+  // ------------------------------------------------------- copiar o achado
+  escolhas.addEventListener("click", async (evento) => {
+    const mostrar = evento.target.closest("#migracao-mostrar-envio");
+    if (mostrar) {
+      modal.querySelector("#migracao-envio").hidden = false;
+      mostrar.hidden = true;
       return;
     }
-    botaoEnviar.disabled = true;
-    try {
-      const { lote_id: loteId } = await api.enviarArquivo("/migracao/enviar", arquivo, {
-        aoProgredir: (fracao) => situacao(`Enviando ${arquivo.name} — ${Math.round(fracao * 100)}%`),
-      });
-      situacao("Arquivo recebido. Copiando…");
-      esconderEscolhas();
-      await acompanhar(modal, loteId);
-    } catch (erro) {
-      botaoEnviar.disabled = false;
-      situacao("");
-      avisar(mensagemDeErro(erro), "erro");
-    }
-  });
 
-  modal.querySelector("#migracao-iniciar")?.addEventListener("click", async (evento) => {
-    const iniciar = evento.currentTarget;
-    iniciar.disabled = true;
-    try {
-      // `pedir`, e não `enviar`: sem internet isto não pode ir pra fila e
-      // disparar sozinho horas depois.
-      const { lote_id: loteId } = await api.pedir("POST", "/migracao/passo-1");
-      esconderEscolhas();
-      await acompanhar(modal, loteId);
-    } catch (erro) {
-      iniciar.disabled = false;
-      avisar(mensagemDeErro(erro), "erro");
+    const copiar = evento.target.closest("[data-copiar]");
+    if (copiar) {
+      copiar.disabled = true;
+      try {
+        // `pedir`, e não `enviar`: sem internet isto não pode ir pra fila e
+        // disparar sozinho horas depois.
+        const { lote_id: loteId } = await api.pedir("POST", "/migracao/passo-1", {
+          caminho: copiar.dataset.copiar,
+        });
+        esconderEscolhas();
+        await acompanhar(modal, loteId);
+      } catch (erro) {
+        copiar.disabled = false;
+        avisar(mensagemDeErro(erro), "erro");
+      }
+      return;
+    }
+
+    const enviar = evento.target.closest("#migracao-enviar");
+    if (enviar) {
+      const arquivo = modal.querySelector("#migracao-arquivo")?.files?.[0];
+      if (!arquivo) {
+        avisar("Escolha o arquivo do sistema antigo primeiro", "erro");
+        return;
+      }
+      enviar.disabled = true;
+      try {
+        const { lote_id: loteId } = await api.enviarArquivo("/migracao/enviar", arquivo, {
+          aoProgredir: (fracao) => situacao(`Enviando ${arquivo.name} — ${Math.round(fracao * 100)}%`),
+        });
+        situacao("Arquivo recebido. Copiando…");
+        esconderEscolhas();
+        await acompanhar(modal, loteId);
+      } catch (erro) {
+        enviar.disabled = false;
+        situacao("");
+        avisar(mensagemDeErro(erro), "erro");
+      }
     }
   });
 });

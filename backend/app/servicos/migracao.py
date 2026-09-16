@@ -291,6 +291,109 @@ def _ler_pasta(pasta: Path) -> Iterator[TabelaAntiga]:
             yield _ler_csv(arquivo)
 
 
+# ------------------------------------------- achar o sistema antigo sozinho
+
+# O que é banco de sistema antigo. Fora daqui fica o que é programa, ajuda,
+# imagem — o que não interessa e só atrapalharia a lista.
+EXTENSOES_DE_BANCO = {".mdb", ".accdb", ".fdb", ".gdb", ".db", ".sqlite", ".sqlite3", ".dbf"}
+
+# Pastas onde nunca há sistema de balcão, e que custam caro pra varrer.
+IGNORAR = {
+    "windows", "$recycle.bin", "appdata", "programdata", "system volume information",
+    "node_modules", ".git", ".venv", "__pycache__", "library", "recovery", "msocache",
+}
+
+PROFUNDIDADE = 4       # o bastante pra C:\Sistema\Dados\arquivo.dbf
+TETO_DE_ARQUIVOS = 40_000   # varredura tem que terminar rápido; não é backup
+
+
+def _lugares_comuns() -> list[Path]:
+    """Onde um sistema de balcão costuma estar instalado."""
+    if os.name == "nt":
+        candidatos = ["C:/", "C:/Program Files", "C:/Program Files (x86)", "C:/Sistemas",
+                      "C:/Dados", "C:/Arquivos de Programas", "D:/",
+                      Path.home() / "Desktop", Path.home() / "Documents"]
+    else:
+        candidatos = [Path.home() / "Desktop", Path.home() / "Documents", Path.home() / "Downloads"]
+    return [Path(c) for c in candidatos if Path(c).is_dir()]
+
+
+def _quando(instante: float) -> str:
+    """A data que aparece na tela, no relógio de quem está olhando."""
+    return dt.datetime.fromtimestamp(instante, tz=dt.UTC).astimezone().strftime("%d/%m/%Y %H:%M")
+
+
+def _vale_olhar(pasta: Path) -> bool:
+    return pasta.name.lower() not in IGNORAR and not pasta.name.startswith(".")
+
+
+def procurar_sistemas_antigos(raizes: list[Path] | None = None, limite: int = 20) -> list[dict]:
+    """Varre o disco atrás do sistema antigo e devolve os candidatos, do mais
+    provável pro menos.
+
+    Mais provável = maior e mexido mais recentemente. Um sistema em uso tem
+    banco grande e data de ontem; um resto de instalação antiga tem 4 KB e data
+    de 2015.
+
+    Pasta cheia de `.dbf` vira **um** candidato, e não trinta: em dBase e
+    Clipper cada tabela é um arquivo, mas o sistema é a pasta.
+    """
+    vistos = 0
+    arquivos: list[Path] = []
+    for raiz in (raizes if raizes is not None else _lugares_comuns()):
+        pilha = [(raiz, 0)]
+        while pilha and vistos < TETO_DE_ARQUIVOS:
+            pasta, fundo = pilha.pop()
+            try:
+                for item in pasta.iterdir():
+                    vistos += 1
+                    if vistos >= TETO_DE_ARQUIVOS:
+                        break
+                    if item.is_dir():
+                        if fundo < PROFUNDIDADE and _vale_olhar(item):
+                            pilha.append((item, fundo + 1))
+                    elif item.suffix.lower() in EXTENSOES_DE_BANCO:
+                        arquivos.append(item)
+            except (PermissionError, OSError):
+                continue  # pasta do sistema, atalho quebrado: segue a vida
+
+    # Os .dbf de uma mesma pasta são um sistema só.
+    pastas_dbf: dict[Path, list[Path]] = {}
+    soltos: list[Path] = []
+    for arquivo in arquivos:
+        if arquivo.suffix.lower() == ".dbf":
+            pastas_dbf.setdefault(arquivo.parent, []).append(arquivo)
+        else:
+            soltos.append(arquivo)
+
+    achados: list[dict] = []
+    for arquivo in soltos:
+        try:
+            dados = arquivo.stat()
+        except OSError:
+            continue
+        achados.append({
+            "caminho": str(arquivo), "nome": arquivo.name, "tipo": arquivo.suffix.lower().lstrip("."),
+            "bytes": dados.st_size, "modificado": _quando(dados.st_mtime),
+            "arquivos": 1,
+        })
+    for pasta, lista in pastas_dbf.items():
+        try:
+            tamanho = sum(a.stat().st_size for a in lista)
+            recente = max(a.stat().st_mtime for a in lista)
+        except OSError:
+            continue
+        achados.append({
+            "caminho": str(pasta), "nome": pasta.name, "tipo": "dbf",
+            "bytes": tamanho, "modificado": _quando(recente),
+            "arquivos": len(lista),
+        })
+
+    # Maior e mais recente primeiro: é o que está em uso.
+    achados.sort(key=lambda a: (a["bytes"], a["modificado"]), reverse=True)
+    return achados[:limite]
+
+
 # ------------------------------------------------------------ valores e nomes
 
 

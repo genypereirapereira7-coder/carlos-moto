@@ -78,3 +78,45 @@ async def test_uma_copia_de_cada_vez(cliente, dados, entrar, com_destino, monkey
     resposta = await cliente.post("/migracao/enviar", files=_arquivo("dados.db"), headers=cabecalho)
     assert resposta.status_code == 409
     assert "rodando" in resposta.json()["detail"]
+
+
+# ------------------------------------------- achar o sistema antigo sozinho
+
+async def test_procurar_lista_o_que_achou(cliente, dados, entrar, com_destino):
+    """Na máquina do cliente devolve os bancos encontrados; na nuvem, lista
+    vazia — e é assim que a tela sabe que ali o jeito é receber o arquivo."""
+    cabecalho = await entrar(dados["carlos"].id)
+    resposta = await cliente.get("/migracao/procurar", headers=cabecalho)
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert isinstance(corpo["achados"], list)
+    for achado in corpo["achados"]:
+        assert {"caminho", "nome", "tipo", "bytes", "modificado", "arquivos"} <= achado.keys()
+
+
+async def test_vendedor_nao_procura(cliente, dados, entrar, com_destino):
+    cabecalho = await entrar(dados["joao"].id)
+    assert (await cliente.get("/migracao/procurar", headers=cabecalho)).status_code == 403
+
+
+async def test_caminho_de_fora_da_varredura_e_recusado(cliente, dados, entrar, com_destino):
+    """A trava que impede a rota de virar "leia qualquer arquivo do servidor".
+
+    Sem ela, bastaria pedir `/etc/passwd` — ou o banco do próprio sistema — e o
+    conteúdo subiria pro espelho.
+    """
+    cabecalho = await entrar(dados["carlos"].id)
+    for caminho in ("/etc/passwd", "/etc/hosts", "../../backend/_dev.db"):
+        resposta = await cliente.post("/migracao/passo-1", json={"caminho": caminho}, headers=cabecalho)
+        assert resposta.status_code == 400, caminho
+        assert "encontrados" in resposta.json()["detail"]
+
+
+async def test_sem_nada_configurado_e_sem_escolha_nao_copia(cliente, dados, entrar, com_destino, monkeypatch):
+    """Nenhuma origem na variável de ambiente e nenhum caminho escolhido: a
+    rota diz que não achou, em vez de estourar lá dentro."""
+    monkeypatch.setattr(rota, "_origem", lambda: "")
+    cabecalho = await entrar(dados["carlos"].id)
+    resposta = await cliente.post("/migracao/passo-1", json={}, headers=cabecalho)
+    assert resposta.status_code == 409
+    assert "não achei" in resposta.json()["detail"].lower()

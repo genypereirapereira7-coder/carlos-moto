@@ -2,9 +2,11 @@
 
 Dois caminhos pro mesmo lugar, porque o cliente pode estar em dois lugares:
 
-  `POST /migracao/passo-1` — o servidor lê o sistema antigo direto do disco.
-  Só funciona quando ele está rodando **no computador do cliente**: um
-  servidor na nuvem não enxerga o disco de ninguém.
+  `GET /migracao/procurar` + `POST /migracao/passo-1` — o servidor **acha o
+  sistema antigo sozinho** no disco e copia. Ninguém escolhe arquivo nenhum:
+  um clique e acabou. Só funciona quando o servidor está rodando **no
+  computador do cliente**; na nuvem a varredura não acha nada, porque lá não
+  existe o disco dele.
 
   `POST /migracao/enviar` — o cliente **escolhe o arquivo** na tela e manda
   pra cá. Funciona da nuvem, de qualquer computador, sem instalar nada: o
@@ -23,6 +25,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
+from pydantic import BaseModel
 
 from app.config import get_config
 from app.dependencias import SoDono
@@ -83,24 +86,60 @@ async def estado(_: SoDono):
     }
 
 
+class EscolhaEntrada(BaseModel):
+    """Qual dos sistemas antigos encontrados copiar. Vazio = o configurado na
+    variável de ambiente."""
+
+    caminho: str | None = None
+
+
+@rotas.get("/procurar")
+async def procurar(_: SoDono):
+    """Varre o disco deste computador atrás do sistema antigo.
+
+    Na nuvem devolve lista vazia, e é assim que a tela sabe que ali o jeito é
+    receber o arquivo pela mão do dono.
+    """
+    achados = await asyncio.to_thread(migracao.procurar_sistemas_antigos)
+    return {"achados": achados, "origem_configurada": _origem() or None}
+
+
 @rotas.post("/passo-1", status_code=status.HTTP_202_ACCEPTED)
-async def iniciar_passo_1(_: SoDono):
+async def iniciar_passo_1(_: SoDono, escolha: EscolhaEntrada | None = None):
     """Começa a cópia e responde na hora com o número do lote. A cópia continua
     em segundo plano; a tela acompanha por `GET /migracao/lotes/{id}`."""
     global _tarefa
-    if not (_origem() and _destino()):
+    if not _destino():
         raise HTTPException(status.HTTP_409_CONFLICT, "A migração não está configurada neste computador.")
     if _rodando():
         raise HTTPException(status.HTTP_409_CONFLICT, "Já tem uma cópia rodando.")
 
+    escolhido = (escolha.caminho or "").strip() if escolha else ""
+    if escolhido:
+        # Só caminho que apareceu na varredura. Sem esta conferência, a rota
+        # viraria "leia qualquer arquivo do servidor pra mim" — inclusive os
+        # que não são banco de sistema antigo nenhum.
+        encontrados = await asyncio.to_thread(migracao.procurar_sistemas_antigos)
+        if escolhido not in {achado["caminho"] for achado in encontrados}:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Esse caminho não está entre os sistemas antigos encontrados neste computador.",
+            )
+    origem = escolhido or _origem()
+    if not origem:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Não achei nenhum sistema antigo neste computador.",
+        )
+
     try:
-        lote_id = await migracao.abrir_lote(_destino(), _origem())
+        lote_id = await migracao.abrir_lote(_destino(), origem)
     except Exception as erro:
         log.warning("migração: banco da nuvem não respondeu", exc_info=True)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"Não deu pra falar com o banco da nuvem ({type(erro).__name__}).") from None
 
-    _tarefa = asyncio.create_task(migracao.executar_passo_1(_destino(), _origem(), lote_id))
+    _tarefa = asyncio.create_task(migracao.executar_passo_1(_destino(), origem, lote_id))
     _tarefa.add_done_callback(_registrar_fim)
     return {"lote_id": lote_id}
 
