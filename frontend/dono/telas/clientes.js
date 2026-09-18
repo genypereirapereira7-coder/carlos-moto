@@ -14,6 +14,8 @@ import {
   rotuloStatusParcela, classeStatusParcela, classeDoSaldo,
 } from "../ui.js";
 import * as v from "../validacao.js";
+import { htmlCamposConjuge, ligarConjuge, lerConjuge, regrasConjuge, corpoConjuge } from "../conjuge.js";
+import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
 
 function escapar(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, (c) => (
@@ -174,7 +176,13 @@ export async function renderClientes(raiz) {
           <div><dt>CPF</dt><dd>${formatarCpf(c.cpf)}</dd></div>
           <div><dt>Telefone</dt><dd>${escapar(formatarTelefone(c.telefone))}</dd></div>
           <div><dt>Situação</dt><dd>${situacao}</dd></div>
+          ${c.casado == null ? "" : `<div><dt>Estado civil</dt><dd>${c.casado ? "Casado(a)" : "Solteiro(a)"}</dd></div>`}
+          ${c.casado && c.conjuge_nome ? `<div><dt>Cônjuge</dt><dd>${escapar(c.conjuge_nome)}</dd></div>` : ""}
+          ${c.casado && c.conjuge_telefone ? `<div><dt>Telefone do cônjuge</dt><dd>${escapar(formatarTelefone(c.conjuge_telefone))}</dd></div>` : ""}
         </dl>
+        ${c.observacao ? `
+          <h3 class="secao-seguinte">Observação</h3>
+          <p class="texto-observacao">${escapar(c.observacao)}</p>` : ""}
 
         <div class="abas-filtro secao-seguinte" id="abas-historico">
           <button class="aba-filtro" data-aba="comprou" type="button">Comprou (${c.comprou.length})</button>
@@ -274,6 +282,8 @@ export async function renderClientes(raiz) {
         <label class="campo">Nome<input name="nome" value="${escapar(cliente?.nome || "")}" required /></label>
         <label class="campo">Telefone<input name="telefone" value="${escapar(cliente?.telefone || "")}" placeholder="(11) 99999-0000" /></label>
       </div>
+      ${htmlCamposConjuge(cliente)}
+      ${htmlCampoObservacao(cliente?.observacao, "Ex.: prefere WhatsApp; cliente antigo da loja.")}
     `;
   }
 
@@ -290,6 +300,7 @@ export async function renderClientes(raiz) {
       </form>
     `);
 
+    ligarConjuge(modal);
     modal.querySelector("#cancelar-novo-cliente").addEventListener("click", () => fecharModal(modal));
     modal.querySelector("#form-novo-cliente").addEventListener("submit", async (evento) => {
       evento.preventDefault();
@@ -298,12 +309,16 @@ export async function renderClientes(raiz) {
       const nome = dados.get("nome");
       const documento = dados.get("cpf");
       const fone = dados.get("telefone");
+      const conjuge = lerConjuge(dados);
+      const observacao = lerObservacao(dados);
 
       const valido = v.validarFormulario(form, [
         ["nome", v.textoPreenchido(nome), "Informe o nome"],
         ["cpf", v.textoPreenchido(documento), "CPF é obrigatório"],
         ["cpf", !v.textoPreenchido(documento) || v.cpfValido(documento), "CPF inválido — confira os números"],
         ["telefone", v.telefoneValido(fone), "Telefone precisa ter 10 ou 11 dígitos, com DDD"],
+        ...regrasConjuge(conjuge),
+        ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
 
@@ -312,6 +327,8 @@ export async function renderClientes(raiz) {
           nome,
           cpf: documento,
           telefone: fone || null,
+          ...corpoConjuge(conjuge),
+          observacao,
         }, { rotulo: `Cliente ${nome}` });
         fecharModal(modal);
         avisar("Cliente cadastrado");
@@ -340,6 +357,7 @@ export async function renderClientes(raiz) {
       </form>
     `);
 
+    ligarConjuge(modal);
     modal.querySelector("#cancelar-editar-cliente").addEventListener("click", () => fecharModal(modal));
     modal.querySelector("#form-editar-cliente").addEventListener("submit", async (evento) => {
       evento.preventDefault();
@@ -348,15 +366,20 @@ export async function renderClientes(raiz) {
       const nome = dados.get("nome");
       const fone = dados.get("telefone");
 
+      const conjuge = lerConjuge(dados);
+      const observacao = lerObservacao(dados);
+
       const valido = v.validarFormulario(form, [
         ["nome", v.textoPreenchido(nome), "Informe o nome"],
         ["telefone", v.telefoneValido(fone), "Telefone precisa ter 10 ou 11 dígitos, com DDD"],
+        ...regrasConjuge(conjuge),
+        ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
 
       try {
         await api.enviar("PATCH", `/clientes/${cliente.id}`, {
-          nome, telefone: fone || null,
+          nome, telefone: fone || null, ...corpoConjuge(conjuge), observacao,
         }, { rotulo: `Edição do cliente ${nome}` });
         fecharModal(modal);
         avisar("Cliente atualizado");

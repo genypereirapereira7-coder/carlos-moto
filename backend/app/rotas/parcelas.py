@@ -9,7 +9,7 @@ from app.models.cliente import Cliente
 from app.models.moto import Moto
 from app.models.parcela import Parcela
 from app.models.venda import Venda
-from app.schemas.parcela import MarcarPagaEntrada, ParcelaComCliente
+from app.schemas.parcela import MarcarPagaEntrada, PagamentoEntrada, ParcelaComCliente
 from app.servicos import parcelas as servico
 from app.servicos.eventos import Evento, publicar_apos_commit
 
@@ -24,6 +24,8 @@ def _saida(parcela: Parcela, venda: Venda, cliente: Cliente, moto: Moto) -> Parc
         vencimento=parcela.vencimento,
         pago_em=parcela.pago_em,
         status=parcela.status,
+        total_pago_centavos=parcela.total_pago_centavos,
+        saldo_centavos=parcela.saldo_centavos,
         venda_id=venda.id,
         cliente_id=cliente.id,
         cliente_nome=cliente.nome,
@@ -49,6 +51,35 @@ async def marcar(parcela_id: uuid.UUID, dados: MarcarPagaEntrada, sessao: Sessao
         parcela = await servico.marcar(sessao, parcela_id, dados.pago, dados.data_pagamento)
     except servico.ParcelaInexistente as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcela não existe") from erro
+    except servico.PagamentoAntesDaVenda as erro:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "A data do pagamento não pode ser antes da data da venda",
+        ) from erro
+
+    venda = parcela.venda
+    saida = _saida(parcela, venda, venda.cliente, venda.moto)
+    await publicar_apos_commit(sessao, Evento.PARCELA_ATUALIZADA, saida.model_dump(mode="json"))
+    return saida
+
+
+@rotas.post("/{parcela_id}/pagamentos", response_model=ParcelaComCliente)
+async def pagar_um_pouco(
+    parcela_id: uuid.UUID, dados: PagamentoEntrada, sessao: SessaoDep, _: SoDono
+):
+    """Lança um pagamento em pedaço: o cliente pagou parte da parcela. A
+    parcela continua aberta mostrando o que falta até ser quitada."""
+    try:
+        parcela = await servico.registrar_pagamento(
+            sessao, parcela_id, dados.valor_centavos, dados.data_pagamento
+        )
+    except servico.ParcelaInexistente as erro:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcela não existe") from erro
+    except servico.PagamentoInvalido as erro:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "O valor passa do que falta nessa parcela",
+        ) from erro
     except servico.PagamentoAntesDaVenda as erro:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

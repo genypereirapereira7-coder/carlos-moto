@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from app.config import get_config
 from app.db import Sessao
+from app.models.base import agora
 from app.models.cliente import Cliente
 from app.models.moto import CondicaoMoto, Moto
 from app.models.usuario import Papel, Usuario
@@ -21,6 +22,11 @@ cfg = get_config()
 
 USUARIOS = [
     ("Carlos", Papel.DONO),
+    # Os dois vendedores da loja. Entram já liberados — o dono escolhe qual
+    # deles fez cada venda no formulário de venda. Cada um ganha a própria
+    # chave de acesso no seed (podem, se quiserem, entrar no próprio aparelho).
+    ("Zé Carlos", Papel.VENDEDOR),
+    ("Dani", Papel.VENDEDOR),
 ]
 
 # (nome, cpf, telefone)
@@ -71,12 +77,19 @@ async def semear(detalhado: bool = True) -> None:
                 # A chave só existe em claro aqui, neste instante. O banco
                 # guarda o hash; por isso ela é impressa logo abaixo — se
                 # passar batido, o jeito é gerar outra.
-                chave = cfg.chave_dono or gerar_chave()
+                #
+                # `chave_dono` (a fixa do ambiente) é só do dono: usá-la pra
+                # todos colidiria o hash único assim que entrasse o segundo
+                # usuário. Vendedor sempre ganha uma chave aleatória própria.
+                chave = (cfg.chave_dono if papel == Papel.DONO else "") or gerar_chave()
                 usuario = Usuario(
                     nome=nome,
                     chave_hash=hash_chave(chave),
                     papel=papel,
                     ativo=True,
+                    # Nasce liberado — o dono e os vendedores existem antes de
+                    # o sistema subir, não passam pela fila de aprovação.
+                    aprovado_em=agora(),
                 )
                 sessao.add(usuario)
                 await sessao.flush()
@@ -84,6 +97,16 @@ async def semear(detalhado: bool = True) -> None:
                 criados.append(f"usuário {nome} ({papel.value})")
             if papel == Papel.DONO:
                 carlos_id = usuario.id
+
+        if not cfg.semear_exemplos:
+            # Só as contas. Sem estoque nem cliente de mentira — a loja entra
+            # com os dados dela.
+            await sessao.commit()
+            if criados:
+                print(f"seed: {len(criados)} conta(s) criada(s), sem dados de exemplo")
+            else:
+                print("seed: nada a fazer, banco já semeado")
+            return
 
         clientes_por_nome: dict[str, Cliente] = {}
         for nome, cpf, telefone in CLIENTES:

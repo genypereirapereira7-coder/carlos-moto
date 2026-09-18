@@ -65,6 +65,17 @@ export function telefoneValido(valor) {
   return d.length === 10 || d.length === 11;
 }
 
+/**
+ * E-mail: em branco passa (é opcional), preenchido tem que ter cara de
+ * e-mail. Mesma regra frouxa de propósito do servidor — o objetivo é pegar o
+ * dedo escorregado, não certificar endereço.
+ */
+export function emailValido(valor) {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return true;
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(texto);
+}
+
 export function textoPreenchido(valor) {
   return String(valor ?? "").trim().length > 0;
 }

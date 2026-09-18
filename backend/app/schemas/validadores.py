@@ -129,6 +129,43 @@ def validar_telefone(valor: str | None) -> str | None:
     return digitos
 
 
+def validar_cpf_opcional(valor: str | None) -> str | None:
+    """CPF que pode faltar (o do fornecedor, o do avalista): em branco passa,
+    preenchido tem que fechar a conta como qualquer outro CPF."""
+    if valor is None or not str(valor).strip():
+        return None
+    return validar_cpf(valor)
+
+
+# Regex de e-mail proposital de "bom o bastante": algo@algo.algo, sem espaço.
+# Não é a gramática completa do RFC — essa recusa e-mail de verdade e aceita
+# lixo, e aqui o que importa é pegar o dedo escorregado, não certificar.
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def validar_email(valor: str | None) -> str | None:
+    """Em branco passa (e-mail é opcional). Preenchido, tem que ter cara de
+    e-mail — senão o dono digitou errado e ninguém avisa."""
+    if valor is None:
+        return None
+    texto = valor.strip().lower()
+    if not texto:
+        return None
+    if not _EMAIL.match(texto):
+        raise ValueError("E-mail inválido — confira o endereço")
+    return texto
+
+
+def validar_observacao(valor: str | None) -> str | None:
+    """Anotação livre do dono. Em branco (ou só espaço) vira `None` — assim a
+    tela não precisa distinguir "campo vazio" de "campo com um espaço", e o
+    banco não guarda linha em branco que parece anotação."""
+    if valor is None:
+        return None
+    texto = valor.strip()
+    return texto or None
+
+
 def validar_texto_nao_vazio(valor: str | None) -> str | None:
     """Pega o `"   "` que passaria num `min_length=1` sem perceber que é só
     espaço em branco."""

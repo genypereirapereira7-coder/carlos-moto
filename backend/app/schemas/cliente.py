@@ -10,29 +10,61 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 from app.models.venda import FormaPagamento
 from app.schemas.parcela import ParcelaSaida
 from app.schemas.tipos import Utc
-from app.schemas.validadores import validar_cpf, validar_telefone, validar_texto_nao_vazio
+from app.schemas.validadores import (
+    validar_cpf,
+    validar_cpf_opcional,
+    validar_telefone,
+    validar_observacao,
+    validar_texto_nao_vazio,
+)
 
 _Nome = Annotated[
     str, Field(min_length=1, max_length=120), AfterValidator(validar_texto_nao_vazio)
 ]
 _Cpf = Annotated[str, AfterValidator(validar_cpf)]
 _Telefone = Annotated[str, Field(max_length=20), AfterValidator(validar_telefone)]
+_Observacao = Annotated[str, Field(max_length=1000), AfterValidator(validar_observacao)]
 
 
-class ClienteEntrada(BaseModel):
+class _ComConjuge(BaseModel):
+    """Estado civil + cônjuge, com a regra que vale nos dois sentidos.
+
+    Casado: nome e telefone do cônjuge são obrigatórios — é por eles que a
+    loja acha a família quando o titular some. CPF do cônjuge é opcional,
+    porque nem sempre o documento dele está na mão na hora do cadastro.
+    """
+
+    casado: bool | None = None
+    conjuge_nome: Annotated[str, Field(max_length=120)] | None = None
+    conjuge_cpf: Annotated[str, AfterValidator(validar_cpf_opcional)] | None = None
+    conjuge_telefone: _Telefone | None = None
+
+    @model_validator(mode="after")
+    def _conjuge_completo(self):
+        if self.casado:
+            if not (self.conjuge_nome or "").strip():
+                raise ValueError("Casado: informe o nome do cônjuge")
+            if not (self.conjuge_telefone or "").strip():
+                raise ValueError("Casado: informe o telefone do cônjuge")
+        return self
+
+
+class ClienteEntrada(_ComConjuge):
     nome: _Nome
     cpf: _Cpf
     telefone: _Telefone | None = None
+    observacao: _Observacao | None = None
 
 
-class ClientePatch(BaseModel):
+class ClientePatch(_ComConjuge):
     nome: _Nome | None = None
     telefone: _Telefone | None = None
+    observacao: _Observacao | None = None
 
 
 class ClienteSaida(BaseModel):
@@ -40,6 +72,11 @@ class ClienteSaida(BaseModel):
     nome: str
     cpf: str
     telefone: str | None
+    casado: bool | None = None
+    conjuge_nome: str | None = None
+    conjuge_cpf: str | None = None
+    conjuge_telefone: str | None = None
+    observacao: str | None = None
     criado_em: Utc
 
     model_config = {"from_attributes": True}

@@ -4,6 +4,7 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -86,6 +87,22 @@ class Moto(Base):
     # tem `fornecedor_cliente_id` usa o nome de lá.
     fornecedor_cliente_id: Mapped[int | None] = mapped_column(ForeignKey("cliente.id"))
     fornecedor_nome: Mapped[str | None] = mapped_column(String(120))
+
+    # Dados de quem vendeu a moto pra loja, guardados no momento da compra —
+    # é o que o contrato e o comprovante de compra precisam pra valer. Tudo
+    # opcional: entra o que a loja tiver na hora. Quando casado, o cônjuge
+    # costuma assinar junto na venda do veículo, por isso nome e contato dele.
+    fornecedor_cpf: Mapped[str | None] = mapped_column(String(11))
+    fornecedor_email: Mapped[str | None] = mapped_column(String(120))
+    fornecedor_contato: Mapped[str | None] = mapped_column(String(20))
+    fornecedor_casado: Mapped[bool | None] = mapped_column(Boolean)
+    fornecedor_conjuge_nome: Mapped[str | None] = mapped_column(String(120))
+    fornecedor_conjuge_contato: Mapped[str | None] = mapped_column(String(20))
+
+    # Anotação livre do dono sobre esta moto — o que não cabe em campo
+    # nenhum ("riscado no tanque", "veio sem chave reserva"). Só pra ele:
+    # não sai em contrato nem comprovante.
+    observacao: Mapped[str | None] = mapped_column(String(1000))
 
     status: Mapped[StatusMoto] = mapped_column(
         Enum(StatusMoto, name="status_moto"), nullable=False, default=StatusMoto.DISPONIVEL

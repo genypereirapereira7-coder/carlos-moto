@@ -1,5 +1,7 @@
 """Registrar e consultar vendas."""
 
+import uuid
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.dependencias import SessaoDep, SoDono, SoVendedor
@@ -23,9 +25,13 @@ def _saida(venda: Venda) -> VendaSaida:
         cliente_telefone=venda.cliente.telefone,
         forma_pagamento=venda.forma_pagamento,
         preco_venda_centavos=venda.preco_venda_centavos,
+        valor_entrada_centavos=venda.valor_entrada_centavos,
+        juros_centesimos=venda.juros_centesimos,
+        observacao=venda.observacao,
         data_venda=venda.data_venda,
         criado_em=venda.criado_em,
         parcelas=list(venda.parcelas),
+        avalistas=list(venda.avalistas),
         saldo_devedor_centavos=venda.saldo_devedor_centavos,
     )
 
@@ -43,6 +49,10 @@ async def registrar(dados: VendaEntrada, sessao: SessaoDep, ident: SoVendedor):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Moto não existe") from erro
     except servico.ClienteInexistente as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente não existe") from erro
+    except servico.VendedorInvalido as erro:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Vendedor inválido"
+        ) from erro
 
     saida = _saida(venda)
     if criada:
@@ -66,3 +76,13 @@ async def listar(sessao: SessaoDep, _: SoDono):
 async def minhas(sessao: SessaoDep, ident: SoVendedor):
     """As vendas do próprio vendedor logado."""
     return [_saida(v) for v in await servico.listar(sessao, vendedor_id=ident.usuario_id)]
+
+
+@rotas.get("/{venda_id}", response_model=VendaSaida)
+async def obter(venda_id: uuid.UUID, sessao: SessaoDep, _: SoDono):
+    """Uma venda inteira — com parcelas e avalistas. É o que a tela usa pra
+    reimprimir o comprovante e o contrato depois, fora do momento da venda."""
+    venda = await sessao.get(Venda, venda_id)
+    if venda is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Venda não existe")
+    return _saida(venda)

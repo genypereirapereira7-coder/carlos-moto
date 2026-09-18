@@ -12,9 +12,13 @@ from app.schemas.tipos import Utc
 from app.schemas.validadores import (
     validar_ano,
     validar_chassi,
+    validar_cpf_opcional,
+    validar_email,
     validar_nao_no_futuro,
+    validar_observacao,
     validar_placa,
     validar_placa_obrigatoria,
+    validar_telefone,
     validar_texto_nao_vazio,
 )
 
@@ -23,6 +27,16 @@ _PlacaObrigatoria = Annotated[str, Field(min_length=1, max_length=8), AfterValid
 _Chassi = Annotated[str, Field(max_length=17), AfterValidator(validar_chassi)]
 _Ano = Annotated[int, AfterValidator(validar_ano)]
 _DataCompra = Annotated[date, AfterValidator(validar_nao_no_futuro)]
+
+# Dados de quem vendeu a moto pra loja. Todos opcionais — entra o que a loja
+# tiver na hora da compra —, mas o que vier preenchido é validado como
+# qualquer outro campo do sistema.
+_CpfOpcional = Annotated[str, AfterValidator(validar_cpf_opcional)]
+_Email = Annotated[str, Field(max_length=120), AfterValidator(validar_email)]
+_Contato = Annotated[str, Field(max_length=20), AfterValidator(validar_telefone)]
+
+# Anotação livre do dono. Não sai em contrato nem comprovante.
+_Observacao = Annotated[str, Field(max_length=1000), AfterValidator(validar_observacao)]
 
 
 class MotoEntrada(BaseModel):
@@ -46,6 +60,20 @@ class MotoEntrada(BaseModel):
     # que existe no cadastro da moto e não existe no caixa.
     valor_compra_centavos: int | None = Field(default=None, gt=0)
     data_compra: _DataCompra | None = None
+
+    # Quem vendeu a moto pra loja. Entra já no cadastro porque é nesse
+    # momento que a compra acontece e o contrato é assinado — mas tudo
+    # opcional, pra não travar o cadastro rápido de quem só quer pôr a moto
+    # no estoque e completar depois.
+    fornecedor_nome: str | None = Field(default=None, max_length=120)
+    fornecedor_cpf: _CpfOpcional | None = None
+    fornecedor_email: _Email | None = None
+    fornecedor_contato: _Contato | None = None
+    fornecedor_casado: bool | None = None
+    fornecedor_conjuge_nome: str | None = Field(default=None, max_length=120)
+    fornecedor_conjuge_contato: _Contato | None = None
+
+    observacao: _Observacao | None = None
 
     @model_validator(mode="after")
     def _compra_completa(self) -> "MotoEntrada":
@@ -80,6 +108,18 @@ class MotoPatch(BaseModel):
     fornecedor_cliente_id: int | None = None
     fornecedor_nome: str | None = Field(default=None, max_length=120)
 
+    # Quem vendeu a moto pra loja: o contrato de compra é assinado por essa
+    # pessoa, então é aqui que entram CPF, e-mail e contato dela. Casado:
+    # o cônjuge costuma assinar junto a venda de veículo.
+    fornecedor_cpf: _CpfOpcional | None = None
+    fornecedor_email: _Email | None = None
+    fornecedor_contato: _Contato | None = None
+    fornecedor_casado: bool | None = None
+    fornecedor_conjuge_nome: str | None = Field(default=None, max_length=120)
+    fornecedor_conjuge_contato: _Contato | None = None
+
+    observacao: _Observacao | None = None
+
 
 class MotoSaida(BaseModel):
     id: int
@@ -96,6 +136,13 @@ class MotoSaida(BaseModel):
     data_compra: date | None
     fornecedor_cliente_id: int | None
     fornecedor_nome: str | None
+    fornecedor_cpf: str | None = None
+    fornecedor_email: str | None = None
+    fornecedor_contato: str | None = None
+    fornecedor_casado: bool | None = None
+    fornecedor_conjuge_nome: str | None = None
+    fornecedor_conjuge_contato: str | None = None
+    observacao: str | None = None
     status: StatusMoto
     criado_em: Utc
     atualizado_em: Utc

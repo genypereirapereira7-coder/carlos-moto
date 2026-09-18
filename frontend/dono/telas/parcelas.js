@@ -66,9 +66,11 @@ function agruparPorCliente(parcelas) {
       porCliente.set(p.cliente_id, g);
     }
     g.motos.add(`${p.moto_marca} ${p.moto_modelo}${p.moto_placa ? ` (${p.moto_placa})` : ""}`);
-    g.emAberto += p.valor_centavos;
+    // Só o que falta — parcela paga em parte conta o saldo, não o valor cheio.
+    const falta = p.saldo_centavos ?? p.valor_centavos;
+    g.emAberto += falta;
     g.qtd += 1;
-    if (p.status === "ATRASADA") g.atrasado += p.valor_centavos;
+    if (p.status === "ATRASADA") g.atrasado += falta;
     if (!g.proximo || p.vencimento < g.proximo) g.proximo = p.vencimento;
   }
   return [...porCliente.values()].sort((a, b) => {
@@ -117,7 +119,7 @@ export async function renderParcelas(raiz) {
   function desenharResumo(parcelas) {
     const hoje = hojeIso();
     const semana = daquiA(7);
-    const soma = (lista) => lista.reduce((total, p) => total + p.valor_centavos, 0);
+    const soma = (lista) => lista.reduce((total, p) => total + (p.saldo_centavos ?? p.valor_centavos), 0);
     const atrasadas = parcelas.filter((p) => p.status === "ATRASADA");
     const naSemana = parcelas.filter(
       (p) => p.status === "PENDENTE" && p.vencimento >= hoje && p.vencimento <= semana,
@@ -270,19 +272,29 @@ export async function renderParcelas(raiz) {
           ${venda.qtd_parcelas_pagas} de ${venda.qtd_parcelas} pagas · falta ${reais(venda.saldo_devedor_centavos)}
         </strong></p>
         <ul class="sub-parcelas">
-          ${venda.parcelas.map((p) => `
+          ${venda.parcelas.map((p) => {
+            const pago = p.total_pago_centavos ?? 0;
+            const parcial = p.status !== "PAGA" && pago > 0;
+            // O que a linha mostra à direita: paga (com data), abatida em
+            // parte (falta X, já pagou Y) ou ainda inteira.
+            const estado = p.status === "PAGA"
+              ? `${reais(p.valor_centavos)} · paga em ${dataBr(p.pago_em)}`
+              : parcial
+                ? `falta ${reais(p.saldo_centavos)} <span class="fraco">· já pagou ${reais(pago)}</span>`
+                : `${reais(p.valor_centavos)} · ${rotuloStatusParcela(p.status)}`;
+            const acoes = p.status === "PAGA"
+              ? `<button class="link" data-desfazer="${p.id}" type="button">desfazer</button>`
+              : `<button class="botao botao--pequeno" data-receber="${p.id}" type="button">Receber</button>
+                 <button class="link" data-um-pouco="${p.id}" type="button">um pouco</button>`;
+            return `
             <li>
               <span>Parcela ${p.numero} · vence ${dataBr(p.vencimento)}</span>
               <span class="linha-acao">
-                <span class="${classeStatusParcela(p.status)}">
-                  ${reais(p.valor_centavos)} · ${p.status === "PAGA" ? `paga em ${dataBr(p.pago_em)}` : rotuloStatusParcela(p.status)}
-                </span>
-                ${p.status === "PAGA"
-                  ? `<button class="link" data-desfazer="${p.id}" type="button">desfazer</button>`
-                  : `<button class="botao botao--pequeno" data-receber="${p.id}" type="button">Receber</button>`}
+                <span class="${classeStatusParcela(p.status)}">${estado}</span>
+                ${acoes}
               </span>
-            </li>
-          `).join("")}
+            </li>`;
+          }).join("")}
         </ul>
       </li>
     `;
@@ -321,10 +333,15 @@ export async function renderParcelas(raiz) {
     const hoje = hojeIso();
     const diaDaVenda = isoLocal(new Date(venda.data_venda));
 
+    // Quitar recebe o que falta — que numa parcela abatida em parte é menos
+    // que o valor cheio.
+    const aReceber = parcela.saldo_centavos ?? parcela.valor_centavos;
+    const jaPago = parcela.total_pago_centavos ?? 0;
+
     const modal = abrirModal(`
       <div class="modal-topo"><h3>Receber parcela ${parcela.numero} de ${venda.qtd_parcelas}</h3></div>
       <p>${escapar(clienteAtual.nome)} · ${tituloMoto(venda.moto)}</p>
-      <p><strong>${reais(parcela.valor_centavos)}</strong> ·
+      <p><strong>${reais(aReceber)}</strong>${jaPago ? ` <span class="fraco">(já pagou ${reais(jaPago)})</span>` : ""} ·
         ${parcela.status === "ATRASADA"
           ? `<span class="texto-devendo">venceu ${dataBr(parcela.vencimento)}</span>`
           : `vence ${dataBr(parcela.vencimento)}`}</p>
@@ -370,6 +387,71 @@ export async function renderParcelas(raiz) {
           return;
         }
         v.mostrarErroDeApi(form, erro, { porPalavra: [["data", "data_pagamento"]] });
+      }
+    });
+  }
+
+  function abrirModalPagarUmPouco(parcelaId) {
+    const achado = acharParcela(parcelaId);
+    if (!achado) return;
+    const { venda, parcela } = achado;
+    const hoje = hojeIso();
+    const diaDaVenda = isoLocal(new Date(venda.data_venda));
+    const saldo = parcela.saldo_centavos ?? parcela.valor_centavos;
+    const jaPago = parcela.total_pago_centavos ?? 0;
+
+    const modal = abrirModal(`
+      <div class="modal-topo"><h3>Pagar um pouco — parcela ${parcela.numero} de ${venda.qtd_parcelas}</h3></div>
+      <p>${escapar(clienteAtual.nome)} · ${tituloMoto(venda.moto)}</p>
+      <p>Falta <strong>${reais(saldo)}</strong>${jaPago ? ` <span class="fraco">(já pagou ${reais(jaPago)})</span>` : ""}.
+        O que ele pagar agora abate, e a parcela continua aberta até quitar.</p>
+      <form id="form-um-pouco" novalidate>
+        <div class="grade-2">
+          <label class="campo">Quanto ele pagou (R$)
+            <input name="valor" type="number" step="0.01" min="0.01" max="${(saldo / 100).toFixed(2)}" placeholder="0,00" />
+          </label>
+          <label class="campo">Data do pagamento
+            <input name="data_pagamento" type="date" min="${diaDaVenda}" max="${hoje}" value="${hoje}" />
+          </label>
+        </div>
+        <p class="fraco">Use o dia em que o cliente pagou — é nesse dia que o dinheiro entra no financeiro.</p>
+        <div class="acoes-modal">
+          <button type="button" class="botao botao--fantasma" id="cancelar-um-pouco">Cancelar</button>
+          <button type="submit" class="botao">Registrar pagamento</button>
+        </div>
+      </form>
+    `);
+
+    const form = modal.querySelector("#form-um-pouco");
+    modal.querySelector("#cancelar-um-pouco").addEventListener("click", () => fecharModal(modal));
+    form.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const valor = form.elements.valor.value;
+      const data = form.elements.data_pagamento.value;
+      const centavos = Math.round(Number.parseFloat(String(valor).replace(",", ".")) * 100);
+      const valido = v.validarFormulario(form, [
+        ["valor", v.numeroPositivo(valor), "Informe quanto ele pagou"],
+        ["valor", Number.isFinite(centavos) && centavos <= saldo, `No máximo ${reais(saldo)} (o que falta)`],
+        ["data_pagamento", v.textoPreenchido(data), "Informe a data do pagamento"],
+        ["data_pagamento", !data || v.dataNaoFutura(data), "Data não pode ser no futuro"],
+        ["data_pagamento", !data || data >= diaDaVenda, `Não pode ser antes da venda (${dataBr(diaDaVenda)})`],
+      ]);
+      if (!valido) return;
+
+      try {
+        await api.enviar("POST", `/parcelas/${parcela.id}/pagamentos`, {
+          valor_centavos: centavos, data_pagamento: data,
+        }, { rotulo: `Pagamento de ${reais(centavos)} na parcela ${parcela.numero} de ${clienteAtual?.nome || "cliente"}` });
+        fecharModal(modal);
+        avisar(`Pagamento de ${reais(centavos)} registrado`);
+        await atualizarTudo();
+      } catch (erro) {
+        if (guardadoNaFila(erro, `Pagamento na parcela ${parcela.numero}`)) {
+          fecharModal(modal);
+          await atualizarTudo();
+          return;
+        }
+        v.mostrarErroDeApi(form, erro, { porPalavra: [["valor", "valor"], ["data", "data_pagamento"], ["falta", "valor"]] });
       }
     });
   }
@@ -442,6 +524,8 @@ export async function renderParcelas(raiz) {
     }
     const receber = evento.target.closest("[data-receber]");
     if (receber) return abrirModalReceber(receber.dataset.receber);
+    const umPouco = evento.target.closest("[data-um-pouco]");
+    if (umPouco) return abrirModalPagarUmPouco(umPouco.dataset["umPouco"]);
     const desfazer = evento.target.closest("[data-desfazer]");
     if (desfazer) abrirModalDesfazer(desfazer.dataset.desfazer);
   });

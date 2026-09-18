@@ -80,6 +80,12 @@ class Config(BaseSettings):
     # ambiente de teste com chave conhecida.
     chave_dono: str = ""
 
+    # O seed cria um estoque e clientes de exemplo pra quem está conhecendo o
+    # sistema. Com `CARLOSMOTO_SEMEAR_EXEMPLOS=false` ele cria só as contas
+    # (dono e vendedores) e deixa o resto vazio — é como a loja começa de
+    # verdade, sem moto inventada no estoque.
+    semear_exemplos: bool = True
+
     # Migração do sistema antigo (PROVISÓRIO). Só preenchidas no computador
     # do cliente, onde o sistema antigo está; na nuvem ficam vazias e o
     # botão nem aparece.

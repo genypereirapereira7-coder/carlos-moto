@@ -611,6 +611,69 @@ table.tabela tbody tr {
   margin-top: 6px;
 }
 
+/* Ações uma embaixo da outra, largura cheia — usado no painel de "vendido",
+   onde os documentos ficam à mão e o dedo no celular agradece o alvo grande. */
+.acoes-empilhadas {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* -------------------------------------- prévia de comprovante/contrato */
+
+/* A janela larga da prévia de documento — folha A4 cabe melhor aqui do que
+   nos 560px do modal comum. */
+.modal--folha {
+  width: min(820px, 100%);
+}
+
+/* A prévia é a própria folha: fundo branco e tinta preta, independente do
+   modo escuro, porque é exatamente o que vai sair na impressora. */
+.folha-previa {
+  background: #fff;
+  color: #111;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.folha-previa h1, .folha-previa h2 { color: #111; }
+.folha-previa .doc-topo { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+.folha-previa .doc-topo h1 { margin: 0; font-size: 20px; }
+.folha-previa .doc-sub { margin: 4px 0 0; font-size: 12px; color: #444; }
+.folha-previa .doc-titulo { font-size: 15px; text-transform: uppercase; margin: 12px 0 2px; }
+.folha-previa .doc-data { color: #555; margin: 0 0 8px; font-size: 12px; }
+.folha-previa h2 { font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 14px 0 8px; }
+.folha-previa .doc-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 24px; margin: 4px 0 8px; }
+.folha-previa .doc-dados > div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dotted #ddd; padding: 3px 0; }
+.folha-previa .doc-dados dt { color: #555; margin: 0; }
+.folha-previa .doc-dados dd { margin: 0; font-weight: 600; text-align: right; }
+.folha-previa .doc-tabela { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+.folha-previa .doc-tabela th, .folha-previa .doc-tabela td { border: 1px solid #ccc; padding: 5px 8px; }
+.folha-previa .doc-tabela .dir { text-align: right; }
+.folha-previa .doc-tabela tfoot td { font-weight: 700; background: #f3f3f3; }
+.folha-previa .assinaturas { display: flex; gap: 32px; margin-top: 36px; }
+.folha-previa .assinatura { flex: 1; text-align: center; font-size: 12px; }
+.folha-previa .linha-assinatura { display: block; border-top: 1px solid #111; margin-bottom: 4px; height: 1px; }
+
+@media (max-width: 720px) {
+  .folha-previa .doc-dados { grid-template-columns: 1fr; }
+  .folha-previa .assinaturas { flex-direction: column; gap: 28px; }
+}
+
+/* Campo que ocupa a linha inteira mesmo dentro de uma grade de 2 colunas —
+   é o caso da observação, que é texto corrido e não um dado curto. */
+/* Observação é texto que a pessoa escreveu: respeita as quebras de linha
+   dela em vez de espremer tudo num parágrafo só. */
+.texto-observacao {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.campo--largo {
+  grid-column: 1 / -1;
+}
+
 /* O layout de celular fica no fim do arquivo — ver a seção "celular". */
 
 /* ------------------------------------------------------- modo escuro */
@@ -1543,4 +1606,21 @@ table.tabela tr.detalhe-dia td {
   .cartao-login {
     padding: 24px 20px;
   }
+}
+
+/* ---------------------------------------------- autocomplete de modelo */
+
+/* A caixa de sugestões cola no campo de modelo (some a margem que o
+   .resultado-busca genérico deixa), e o item destacado pelas setas do teclado
+   ganha o mesmo fundo do hover. */
+.campo-modelo { position: relative; }
+
+.sugestoes-modelo {
+  margin-top: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.sugestoes-modelo .resultado-item[data-destaque="1"] {
+  background: var(--laranja-fundo);
 }

@@ -11,13 +11,61 @@ import {
   rotuloStatusParcela, classeStatusParcela, classeDoSaldo,
 } from "../ui.js";
 import * as v from "../validacao.js";
-import { htmlSelectMarca, htmlSelectModelo, ligarMarcaModelo } from "../marca-modelo.js";
+import { htmlCampoModelo, ligarAutocompleteModelo } from "../marca-modelo.js";
 import { abrirModalVenda } from "./vender.js";
+import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
+import {
+  imprimirComprovanteCompra, imprimirContratoCompra,
+  imprimirComprovanteVenda, imprimirContratoVenda,
+} from "../comprovantes.js";
 
 function escapar(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
+}
+
+// ---------------------------------------- quem vendeu a moto pra loja
+// Os mesmos campos aparecem no cadastro e na edição: ler, validar e montar o
+// corpo mora aqui pra as duas telas não saírem de sincronia.
+
+function lerFornecedor(dados) {
+  const texto = (campo) => (dados.get(campo) || "").trim();
+  return {
+    nome: texto("fornecedor_nome"),
+    cpf: texto("fornecedor_cpf"),
+    email: texto("fornecedor_email"),
+    contato: texto("fornecedor_contato"),
+    casado: dados.get("fornecedor_casado"),
+    conjugeNome: texto("fornecedor_conjuge_nome"),
+    conjugeContato: texto("fornecedor_conjuge_contato"),
+  };
+}
+
+function regrasFornecedor(f) {
+  // Tudo opcional — mas o que vier preenchido tem que estar certo.
+  return [
+    ["fornecedor_cpf", !f.cpf || v.cpfValido(f.cpf), "CPF inválido — confira os números"],
+    ["fornecedor_email", !f.email || v.emailValido(f.email), "E-mail inválido — confira o endereço"],
+    ["fornecedor_contato", !f.contato || v.telefoneValido(f.contato), "Contato precisa ter 10 ou 11 dígitos, com DDD"],
+    ["fornecedor_conjuge_nome", f.casado !== "sim" || !!f.conjugeNome, "Informe o nome do cônjuge"],
+    ["fornecedor_conjuge_contato", !f.conjugeContato || v.telefoneValido(f.conjugeContato), "Contato do cônjuge precisa ter 10 ou 11 dígitos, com DDD"],
+  ];
+}
+
+function corpoFornecedor(f) {
+  return {
+    fornecedor_nome: f.nome || null,
+    fornecedor_cpf: f.cpf || null,
+    fornecedor_email: f.email || null,
+    fornecedor_contato: f.contato || null,
+    // "" (não respondido) vira null; só "sim"/"nao" viram booleano.
+    fornecedor_casado: f.casado === "" ? null : f.casado === "sim",
+    // Cônjuge só vai junto quando casado — responder "não" limpa o que tinha
+    // ficado de uma resposta anterior.
+    fornecedor_conjuge_nome: f.casado === "sim" ? (f.conjugeNome || null) : null,
+    fornecedor_conjuge_contato: f.casado === "sim" ? (f.conjugeContato || null) : null,
+  };
 }
 
 function centavosParaReaisInput(centavos) {
@@ -176,11 +224,20 @@ export async function renderMotos(raiz) {
           <div><dt>Preço anunciado</dt><dd>${reais(m.preco_centavos)}</dd></div>
         </dl>
 
+        ${m.observacao ? `
+          <h3 class="secao-seguinte">Observação</h3>
+          <p class="texto-observacao">${escapar(m.observacao)}</p>` : ""}
+
         <h3 class="secao-seguinte">Compra</h3>
         <dl class="linhas-dados">
           <div><dt>Valor pago</dt><dd>${compra}</dd></div>
           <div><dt>Comprada de</dt><dd>${escapar(fornecedor)}</dd></div>
         </dl>
+        ${m.valor_compra_centavos != null ? `
+          <div class="acoes-linha">
+            <button class="botao botao--fantasma" id="doc-comprovante-compra" type="button">Comprovante de compra</button>
+            <button class="botao botao--fantasma" id="doc-contrato-compra" type="button">Contrato de compra</button>
+          </div>` : ""}
 
         <h3 class="secao-seguinte">Gastos</h3>
         ${despesasHtml}
@@ -188,6 +245,11 @@ export async function renderMotos(raiz) {
 
         <h3 class="secao-seguinte">Venda</h3>
         ${vendaHtml}
+        ${m.venda ? `
+          <div class="acoes-linha">
+            <button class="botao botao--fantasma" id="doc-comprovante-venda" type="button">Comprovante de venda</button>
+            <button class="botao botao--fantasma" id="doc-contrato-venda" type="button">Contrato de venda</button>
+          </div>` : ""}
 
         ${m.lucro_centavos != null ? `
           <h3 class="secao-seguinte">Resultado</h3>
@@ -201,7 +263,10 @@ export async function renderMotos(raiz) {
   }
 
   function rotuloFormaPagamento(forma) {
-    return { A_VISTA: "À vista", PARCELADO: "Parcelado (loja)", FINANCIADO: "Financiado", CONSORCIO: "Consórcio" }[forma] || forma;
+    return {
+      A_VISTA: "À vista", PARCELADO: "Parcelado (loja)", CHEQUE: "Cheque pré-datado",
+      CARTAO: "Parcelado no cartão", FINANCIADO: "Financiado", CONSORCIO: "Consórcio",
+    }[forma] || forma;
   }
 
   function plugarAcoesDoDetalhe(moto) {
@@ -213,6 +278,29 @@ export async function renderMotos(raiz) {
         await abrirDetalhe(moto.id);
       });
     });
+
+    // Documentos de compra — montados direto da moto (fornecedor, valor, data).
+    raiz.querySelector("#doc-comprovante-compra")?.addEventListener("click", () => imprimirComprovanteCompra(moto));
+    raiz.querySelector("#doc-contrato-compra")?.addEventListener("click", () => imprimirContratoCompra(moto));
+
+    // Documentos de venda — o detalhe da moto traz só um resumo da venda, sem
+    // parcelas nem avalistas. Busca a venda inteira antes de imprimir.
+    async function imprimirVenda(imprimir, botao) {
+      const rotulo = botao.textContent;
+      botao.disabled = true;
+      botao.textContent = "Abrindo…";
+      try {
+        const venda = await api.pedir("GET", `/vendas/${moto.venda.venda_id}`);
+        imprimir(venda);
+      } catch (erro) {
+        avisar(mensagemDeErro(erro), "erro");
+      } finally {
+        botao.disabled = false;
+        botao.textContent = rotulo;
+      }
+    }
+    raiz.querySelector("#doc-comprovante-venda")?.addEventListener("click", (e) => imprimirVenda(imprimirComprovanteVenda, e.currentTarget));
+    raiz.querySelector("#doc-contrato-venda")?.addEventListener("click", (e) => imprimirVenda(imprimirContratoVenda, e.currentTarget));
   }
 
   function abrirModalEditar(moto) {
@@ -222,8 +310,7 @@ export async function renderMotos(raiz) {
       <div class="modal-topo"><h3>Editar moto</h3></div>
       <form id="form-editar-moto" novalidate>
         <div class="grade-2">
-          <label class="campo">Marca<select name="marca">${htmlSelectMarca(moto.marca)}</select></label>
-          <label class="campo">Modelo<select name="modelo">${htmlSelectModelo(moto.marca, moto.modelo)}</select></label>
+          ${htmlCampoModelo(moto.marca, moto.modelo)}
           <label class="campo">Ano<input name="ano" type="number" min="1980" max="${anoMaximo}" value="${moto.ano}" required /></label>
           <label class="campo">Cor<input name="cor" value="${escapar(moto.cor || "")}" /></label>
           <label class="campo">Placa<input name="placa" value="${escapar(moto.placa || "")}" maxlength="8" placeholder="ABC1234 ou ABC1D23" required /></label>
@@ -238,8 +325,31 @@ export async function renderMotos(raiz) {
           <label class="campo">Preço anunciado (R$)<input name="preco" type="number" step="0.01" min="0.01" value="${centavosParaReaisInput(moto.preco_centavos)}" required /></label>
           <label class="campo">Valor de compra (R$)<input name="valor_compra" type="number" step="0.01" min="0.01" value="${centavosParaReaisInput(moto.valor_compra_centavos)}" /></label>
           <label class="campo">Data da compra<input name="data_compra" type="date" max="${hoje}" value="${moto.data_compra || ""}" /></label>
-          <label class="campo">Comprada de (nome)<input name="fornecedor_nome" value="${escapar(moto.fornecedor_nome || "")}" /></label>
         </div>
+
+        <fieldset class="bloco">
+          <legend>Quem vendeu a moto pra loja</legend>
+          <p class="fraco">É esta pessoa que assina o contrato de compra. Preencha o que a loja tiver.</p>
+          <div class="grade-2">
+            <label class="campo">Nome<input name="fornecedor_nome" value="${escapar(moto.fornecedor_nome || "")}" /></label>
+            <label class="campo">CPF<input name="fornecedor_cpf" maxlength="14" placeholder="000.000.000-00" value="${escapar(moto.fornecedor_cpf || "")}" /></label>
+            <label class="campo">E-mail<input name="fornecedor_email" placeholder="nome@email.com" value="${escapar(moto.fornecedor_email || "")}" /></label>
+            <label class="campo">Contato<input name="fornecedor_contato" placeholder="(69) 99999-0000" value="${escapar(moto.fornecedor_contato || "")}" /></label>
+            <label class="campo">É casado(a)?
+              <select name="fornecedor_casado">
+                <option value="" ${moto.fornecedor_casado == null ? "selected" : ""}>—</option>
+                <option value="nao" ${moto.fornecedor_casado === false ? "selected" : ""}>Não</option>
+                <option value="sim" ${moto.fornecedor_casado === true ? "selected" : ""}>Sim</option>
+              </select>
+            </label>
+          </div>
+          <div class="grade-2" id="bloco-conjuge" ${moto.fornecedor_casado === true ? "" : "hidden"}>
+            <label class="campo">Nome do cônjuge<input name="fornecedor_conjuge_nome" value="${escapar(moto.fornecedor_conjuge_nome || "")}" /></label>
+            <label class="campo">Contato do cônjuge<input name="fornecedor_conjuge_contato" placeholder="(69) 99999-0000" value="${escapar(moto.fornecedor_conjuge_contato || "")}" /></label>
+          </div>
+        </fieldset>
+        ${htmlCampoObservacao(moto.observacao, "Ex.: riscado no tanque; veio sem chave reserva.")}
+
         <div class="acoes-modal">
           <button type="button" class="botao botao--fantasma" id="cancelar-editar-moto">Cancelar</button>
           <button type="submit" class="botao">Salvar</button>
@@ -247,7 +357,16 @@ export async function renderMotos(raiz) {
       </form>
     `);
 
-    ligarMarcaModelo(modal.querySelector("#form-editar-moto"));
+    ligarAutocompleteModelo(modal.querySelector("#form-editar-moto"));
+
+    // Cônjuge só faz sentido quando casado — some do formulário fora disso,
+    // pra não pedir dado que ninguém vai preencher.
+    const selectCasado = modal.querySelector('select[name="fornecedor_casado"]');
+    const blocoConjuge = modal.querySelector("#bloco-conjuge");
+    selectCasado.addEventListener("change", () => {
+      blocoConjuge.hidden = selectCasado.value !== "sim";
+    });
+
     modal.querySelector("#cancelar-editar-moto").addEventListener("click", () => fecharModal(modal));
     modal.querySelector("#form-editar-moto").addEventListener("submit", async (evento) => {
       evento.preventDefault();
@@ -262,6 +381,8 @@ export async function renderMotos(raiz) {
       const preco = dados.get("preco");
       const valorCompra = dados.get("valor_compra");
       const dataCompra = dados.get("data_compra");
+      const forn = lerFornecedor(dados);
+      const observacao = lerObservacao(dados);
 
       const valido = v.validarFormulario(form, [
         ["marca", v.textoPreenchido(marca), "Informe a marca"],
@@ -276,6 +397,8 @@ export async function renderMotos(raiz) {
         ["valor_compra", !dataCompra || !!valorCompra, "Informe o valor da compra"],
         ["data_compra", !valorCompra || !!dataCompra, "Informe a data da compra"],
         ["data_compra", v.dataNaoFutura(dataCompra), "Data da compra não pode ser no futuro"],
+        ...regrasFornecedor(forn),
+        ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
 
@@ -289,7 +412,8 @@ export async function renderMotos(raiz) {
         km: Number(km || 0),
         condicao: dados.get("condicao"),
         preco_centavos: reaisInputParaCentavos(preco),
-        fornecedor_nome: dados.get("fornecedor_nome") || null,
+        ...corpoFornecedor(forn),
+        observacao,
       };
       if (valorCompra) corpo.valor_compra_centavos = reaisInputParaCentavos(valorCompra);
       if (dataCompra) corpo.data_compra = dataCompra;
@@ -389,14 +513,36 @@ export async function renderMotos(raiz) {
       <p class="fraco">Placa, marca, modelo e ano agora — o resto (compra, valores) se completa depois, na edição.</p>
       <form id="form-nova-moto" novalidate>
         <div class="grade-2">
-          <label class="campo">Marca<select name="marca">${htmlSelectMarca()}</select></label>
-          <label class="campo">Modelo<select name="modelo">${htmlSelectModelo()}</select></label>
+          ${htmlCampoModelo()}
           <label class="campo">Ano<input name="ano" type="number" min="1980" max="${anoMaximo}" required value="${new Date().getFullYear()}" /></label>
           <label class="campo">Placa<input name="placa" maxlength="8" placeholder="ABC1234 ou ABC1D23" required /></label>
           <label class="campo">Valor que você pagou (R$)<input name="valor_compra" type="number" step="0.01" min="0.01" /></label>
           <label class="campo">Data da compra<input name="data_compra" type="date" max="${hoje}" value="${hoje}" /></label>
         </div>
         <p class="fraco">O valor pago entra no Financeiro como gasto com compra de moto, no dia da compra. Pode deixar em branco e lançar depois, na edição.</p>
+
+        <fieldset class="bloco">
+          <legend>Quem vendeu a moto pra loja</legend>
+          <p class="fraco">É esta pessoa que assina o contrato de compra. Preencha o que a loja tiver.</p>
+          <div class="grade-2">
+            <label class="campo">Nome<input name="fornecedor_nome" /></label>
+            <label class="campo">CPF<input name="fornecedor_cpf" maxlength="14" placeholder="000.000.000-00" /></label>
+            <label class="campo">E-mail<input name="fornecedor_email" placeholder="nome@email.com" /></label>
+            <label class="campo">Contato<input name="fornecedor_contato" placeholder="(69) 99999-0000" /></label>
+            <label class="campo">É casado(a)?
+              <select name="fornecedor_casado">
+                <option value="" selected>—</option>
+                <option value="nao">Não</option>
+                <option value="sim">Sim</option>
+              </select>
+            </label>
+          </div>
+          <div class="grade-2" id="bloco-conjuge-novo" hidden>
+            <label class="campo">Nome do cônjuge<input name="fornecedor_conjuge_nome" /></label>
+            <label class="campo">Contato do cônjuge<input name="fornecedor_conjuge_contato" placeholder="(69) 99999-0000" /></label>
+          </div>
+        </fieldset>
+        ${htmlCampoObservacao("", "Ex.: riscado no tanque; veio sem chave reserva.")}
         <div class="acoes-modal">
           <button type="button" class="botao botao--fantasma" id="cancelar-nova-moto">Cancelar</button>
           <button type="submit" class="botao">Cadastrar</button>
@@ -404,7 +550,14 @@ export async function renderMotos(raiz) {
       </form>
     `);
 
-    ligarMarcaModelo(modal.querySelector("#form-nova-moto"));
+    ligarAutocompleteModelo(modal.querySelector("#form-nova-moto"));
+
+    // Cônjuge só aparece quando casado — ver o mesmo no formulário de edição.
+    const casadoNovo = modal.querySelector('select[name="fornecedor_casado"]');
+    const conjugeNovo = modal.querySelector("#bloco-conjuge-novo");
+    casadoNovo.addEventListener("change", () => {
+      conjugeNovo.hidden = casadoNovo.value !== "sim";
+    });
     modal.querySelector("#cancelar-nova-moto").addEventListener("click", () => fecharModal(modal));
     modal.querySelector("#form-nova-moto").addEventListener("submit", async (evento) => {
       evento.preventDefault();
@@ -416,6 +569,8 @@ export async function renderMotos(raiz) {
       const placa = dados.get("placa");
       const valorCompra = dados.get("valor_compra");
       const dataCompra = dados.get("data_compra");
+      const forn = lerFornecedor(dados);
+      const observacao = lerObservacao(dados);
 
       const valido = v.validarFormulario(form, [
         ["marca", v.textoPreenchido(marca), "Selecione a marca"],
@@ -426,6 +581,8 @@ export async function renderMotos(raiz) {
         ["valor_compra", !valorCompra || v.numeroPositivo(valorCompra), "O valor pago precisa ser maior que zero"],
         ["data_compra", !valorCompra || v.textoPreenchido(dataCompra), "Informe a data da compra"],
         ["data_compra", v.dataNaoFutura(dataCompra), "Data da compra não pode ser no futuro"],
+        ...regrasFornecedor(forn),
+        ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
 
@@ -434,6 +591,8 @@ export async function renderMotos(raiz) {
         modelo,
         ano: Number(ano),
         placa: placa || null,
+        ...corpoFornecedor(forn),
+        observacao,
       };
       // Valor e data viajam juntos: sem valor, a data preenchida sozinha
       // não vira gasto nenhum e o servidor recusaria o par pela metade.

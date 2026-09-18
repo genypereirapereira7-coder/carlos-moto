@@ -19,6 +19,7 @@ from app.rotas import (
     auth,
     clientes,
     financeiro,
+    antigo,
     historico,
     migracao,
     motos,
@@ -138,6 +139,7 @@ app.include_router(parcelas.rotas)
 app.include_router(financeiro.rotas)
 app.include_router(historico.rotas)
 app.include_router(migracao.rotas)
+app.include_router(antigo.rotas)
 app.include_router(relatorios.rotas)
 app.include_router(ws.rotas)
 

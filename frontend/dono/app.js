@@ -12,6 +12,7 @@ import { renderMotos } from "./telas/motos.js";
 import { renderClientes } from "./telas/clientes.js";
 import { renderParcelas } from "./telas/parcelas.js";
 import { renderFinanceiro } from "./telas/financeiro.js";
+import { renderAntigo } from "./telas/antigo.js";
 
 const telaLogin = document.getElementById("tela-login");
 const app = document.getElementById("app");
@@ -24,6 +25,7 @@ const TELAS = {
   clientes: renderClientes,
   parcelas: renderParcelas,
   financeiro: renderFinanceiro,
+  antigo: renderAntigo,
 };
 
 let abaAtual = null;
@@ -130,6 +132,7 @@ document.getElementById("form-login").addEventListener("submit", async (evento) 
 });
 
 document.getElementById("botao-acesso").addEventListener("click", abrirPainelDeAcesso);
+document.getElementById("botao-antigo").addEventListener("click", () => abrirAba("antigo"));
 
 document.getElementById("botao-sair").addEventListener("click", async () => {
   await api.sair();

@@ -32,8 +32,9 @@ from sqlalchemy.orm import selectinload
 from app.models.base import FUSO_DA_LOJA, como_utc
 from app.models.despesa import DespesaMoto
 from app.models.moto import Moto
+from app.models.pagamento_parcela import PagamentoParcela
 from app.models.parcela import Parcela
-from app.models.venda import FormaPagamento, Venda
+from app.models.venda import COM_CARNE, FormaPagamento, Venda
 from app.schemas.financeiro import (
     DiaFinanceiro,
     FinanceiroMes,
@@ -54,6 +55,7 @@ _FORMA = {
     FormaPagamento.A_VISTA: "à vista",
     FormaPagamento.FINANCIADO: "financiada",
     FormaPagamento.CONSORCIO: "por consórcio",
+    FormaPagamento.CARTAO: "no cartão",
 }
 
 
@@ -62,7 +64,7 @@ class _Periodo:
     """Tudo que mexeu no caixa num intervalo de dias, carregado uma vez só."""
 
     vendas: list[Venda]
-    parcelas_pagas: list[Parcela]
+    pagamentos: list[PagamentoParcela]
     compras: list[Moto]
     gastos: list[DespesaMoto]
 
@@ -109,14 +111,17 @@ async def _carregar(sessao: AsyncSession, primeiro: date, ultimo: date) -> _Peri
         )
         .where(Venda.data_venda >= inicio, Venda.data_venda < fim)
     )
-    parcelas = await sessao.execute(
-        select(Parcela)
+    # Cada pagamento em pedaço entra no caixa pelo próprio dia e valor — por
+    # isso a consulta é dos pagamentos, não das parcelas. Uma parcela paga de
+    # uma vez vira um pagamento só, do valor cheio, no dia; o total bate igual.
+    pagamentos = await sessao.execute(
+        select(PagamentoParcela)
         .options(
-            selectinload(Parcela.venda).selectinload(Venda.parcelas),
-            selectinload(Parcela.venda).selectinload(Venda.cliente),
-            selectinload(Parcela.venda).selectinload(Venda.moto),
+            selectinload(PagamentoParcela.parcela).selectinload(Parcela.venda).selectinload(Venda.parcelas),
+            selectinload(PagamentoParcela.parcela).selectinload(Parcela.venda).selectinload(Venda.cliente),
+            selectinload(PagamentoParcela.parcela).selectinload(Parcela.venda).selectinload(Venda.moto),
         )
-        .where(Parcela.pago_em >= inicio, Parcela.pago_em < fim)
+        .where(PagamentoParcela.pago_em >= inicio, PagamentoParcela.pago_em < fim)
     )
     # Compra e gasto são datas puras — já são o dia da loja, sem conversão.
     compras = await sessao.execute(
@@ -136,17 +141,22 @@ async def _carregar(sessao: AsyncSession, primeiro: date, ultimo: date) -> _Peri
     )
     return _Periodo(
         vendas=list(vendas.scalars()),
-        parcelas_pagas=list(parcelas.scalars()),
+        pagamentos=list(pagamentos.scalars()),
         compras=list(compras.scalars()),
         gastos=list(gastos.scalars()),
     )
 
 
 def _entrada_da_venda(venda: Venda) -> int:
-    """O que a venda pôs no caixa no dia dela. Parcelada: só a entrada — o
-    resto chega parcela por parcela."""
-    if venda.forma_pagamento == FormaPagamento.PARCELADO:
-        return venda.preco_venda_centavos - sum(p.valor_centavos for p in venda.parcelas)
+    """O que a venda pôs no caixa no dia dela. Com carnê: só a entrada — o
+    resto chega parcela por parcela.
+
+    Lê o campo gravado em vez de `preço − soma das parcelas`: com juros no
+    carnê as parcelas somam mais que o saldo financiado, e aquela subtração
+    daria entrada negativa.
+    """
+    if venda.forma_pagamento in COM_CARNE:
+        return venda.valor_entrada_centavos
     return venda.preco_venda_centavos
 
 
@@ -155,8 +165,9 @@ def _movimentos(periodo: _Periodo) -> list[Movimento]:
 
     for venda in periodo.vendas:
         entrada = _entrada_da_venda(venda)
-        if venda.forma_pagamento == FormaPagamento.PARCELADO:
-            tipo_de_venda = "parcelada, entrada" if entrada else "parcelada, sem entrada"
+        if venda.forma_pagamento in COM_CARNE:
+            carne = "no cheque" if venda.forma_pagamento == FormaPagamento.CHEQUE else "parcelada"
+            tipo_de_venda = f"{carne}, entrada" if entrada else f"{carne}, sem entrada"
         else:
             tipo_de_venda = _FORMA[venda.forma_pagamento]
         lista.append(Movimento(
@@ -167,17 +178,23 @@ def _movimentos(periodo: _Periodo) -> list[Movimento]:
             saida_centavos=0,
         ))
 
-    for parcela in periodo.parcelas_pagas:
+    for pagamento in periodo.pagamentos:
+        parcela = pagamento.parcela
         venda = parcela.venda
+        estorno = pagamento.valor_centavos < 0
+        valor = abs(pagamento.valor_centavos)
+        rotulo = "Estorno de parcela" if estorno else "Parcela"
         lista.append(Movimento(
-            dia=_dia_da_loja(parcela.pago_em),
+            dia=_dia_da_loja(pagamento.pago_em),
             tipo=TipoMovimento.PARCELA,
             descricao=(
-                f"Parcela {parcela.numero} de {len(venda.parcelas)} — "
+                f"{rotulo} {parcela.numero} de {len(venda.parcelas)} — "
                 f"{venda.cliente.nome} · {_nome_moto(venda.moto)}"
             ),
-            entrada_centavos=parcela.valor_centavos,
-            saida_centavos=0,
+            # Estorno é dinheiro saindo do caixa daquele dia — desconta em vez
+            # de somar, e o saldo do dia continua certo.
+            entrada_centavos=0 if estorno else valor,
+            saida_centavos=valor if estorno else 0,
         ))
 
     for moto in periodo.compras:
@@ -265,7 +282,9 @@ async def do_mes(sessao: AsyncSession, ano: int, mes: int) -> FinanceiroMes:
         lucro_centavos=entrou - compras - arrumacao,
         qtd_vendas=len(periodo.vendas),
         qtd_motos_compradas=len(periodo.compras),
-        qtd_parcelas_recebidas=len(periodo.parcelas_pagas),
+        # Conta os recebimentos (pagamentos positivos) do período — estorno não
+        # é recebimento. Parcela quitada de uma vez é um recebimento só.
+        qtd_parcelas_recebidas=sum(1 for p in periodo.pagamentos if p.valor_centavos > 0),
         lucro_vendas_centavos=lucro_vendas,
         qtd_vendas_sem_custo=sem_custo,
         dias=_dias(movimentos),

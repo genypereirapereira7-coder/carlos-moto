@@ -17,10 +17,21 @@ backend/**/__pycache__/
 # NADA daqui pode ir pro GitHub: são as motos, os clientes, os CPFs, as
 # vendas e o hash da chave de acesso do Carlos. Os backups principalmente —
 # cada um é uma cópia inteira do banco.
-backend/_dev.db
-backend/_dev.db.backup-*
+# `_dev.db*` com asterisco no fim de propósito: pega o banco, os -shm/-wal e
+# QUALQUER cópia de segurança (_dev.db.bak-..., _dev.db.antes-de-limpar-...).
+# O padrão antigo só pegava nomes terminados em .db e deixava os backups
+# passarem — que são justamente cópias inteiras do banco da loja.
+backend/_dev.db*
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/_dev.log
 backend/*.log
+
+# --- ferramenta de teste, não faz parte do sistema -------------------------
+# O puppeteer é instalado à mão quando é preciso abrir o painel num navegador
+# de verdade pra conferir uma tela. O sistema não usa npm pra nada: as duas
+# telas são JS puro servido pelo backend.
+node_modules/
+frontend/package.json
+frontend/package-lock.json

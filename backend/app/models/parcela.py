@@ -41,6 +41,12 @@ class Parcela(Base):
     )
 
     venda: Mapped["Venda"] = relationship(back_populates="parcelas", lazy="selectin")
+    # O carnê da loja aceita pagamento em pedaços — cada pedaço é uma linha
+    # aqui. Ver `models/pagamento_parcela.py`. Ordenados pela data em que
+    # entraram, que é como o extrato da parcela é lido.
+    pagamentos: Mapped[list["PagamentoParcela"]] = relationship(
+        back_populates="parcela", lazy="selectin", order_by="PagamentoParcela.criado_em"
+    )
 
     __table_args__ = (
         CheckConstraint("valor_centavos >= 0", name="valor_nao_negativo"),
@@ -49,10 +55,21 @@ class Parcela(Base):
     )
 
     @property
+    def total_pago_centavos(self) -> int:
+        """Soma dos pagamentos (estorno entra negativo e desconta). Nunca abaixo
+        de zero — um estorno a mais não vira "a loja deve pro cliente"."""
+        return max(0, sum(p.valor_centavos for p in self.pagamentos))
+
+    @property
+    def saldo_centavos(self) -> int:
+        """O que ainda falta pagar desta parcela."""
+        return max(0, self.valor_centavos - self.total_pago_centavos)
+
+    @property
     def status(self) -> StatusParcela:
-        """Atrasada só no dia seguinte ao vencimento, no relógio da loja — a
-        parcela que vence hoje ainda está em dia até a meia-noite de Brasília,
-        não até a meia-noite de Londres."""
-        if self.pago_em is not None:
+        """Paga quando o saldo zerou. Senão, atrasada só no dia seguinte ao
+        vencimento, no relógio da loja — a parcela que vence hoje ainda está em
+        dia até a meia-noite de Brasília, não até a de Londres."""
+        if self.valor_centavos > 0 and self.saldo_centavos == 0:
             return StatusParcela.PAGA
         return StatusParcela.ATRASADA if self.vencimento < hoje() else StatusParcela.PENDENTE

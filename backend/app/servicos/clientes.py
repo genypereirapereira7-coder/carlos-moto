@@ -43,7 +43,9 @@ def _so_digitos(valor: str) -> str:
 
 
 async def criar(sessao: AsyncSession, dados: ClienteEntrada) -> Cliente:
-    cliente = Cliente(nome=dados.nome, cpf=dados.cpf, telefone=dados.telefone)
+    # `model_dump()` e não campo a campo: campo novo no schema (estado civil,
+    # cônjuge) passa a ser gravado sem alguém precisar lembrar desta linha.
+    cliente = Cliente(**dados.model_dump())
     sessao.add(cliente)
     try:
         await sessao.flush()

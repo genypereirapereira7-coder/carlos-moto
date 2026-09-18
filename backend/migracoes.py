@@ -41,6 +41,52 @@ async def aplicar(engine: AsyncEngine) -> list[str]:
             ))
             feitas.append("despesa_moto.id_cliente (evita lançar o mesmo gasto duas vezes)")
 
+        # Dados de quem vendeu a moto pra loja — o contrato e o comprovante de
+        # compra precisam deles. Todos nulos: moto comprada antes desta tela
+        # existir não tem como ganhar esses dados retroativamente.
+        colunas_moto = await _colunas(conexao, "moto")
+        for coluna, tipo in (
+            ("fornecedor_cpf", "VARCHAR(11)"),
+            ("fornecedor_email", "VARCHAR(120)"),
+            ("fornecedor_contato", "VARCHAR(20)"),
+            ("fornecedor_casado", "BOOLEAN"),
+            ("fornecedor_conjuge_nome", "VARCHAR(120)"),
+            ("fornecedor_conjuge_contato", "VARCHAR(20)"),
+        ):
+            if coluna not in colunas_moto:
+                await conexao.execute(text(f"ALTER TABLE moto ADD COLUMN {coluna} {tipo}"))
+                feitas.append(f"moto.{coluna} (dados de quem vendeu a moto pra loja)")
+
+        # Estado civil e cônjuge do cliente.
+        colunas_cliente = await _colunas(conexao, "cliente")
+        for coluna, tipo in (
+            ("casado", "BOOLEAN"),
+            ("conjuge_nome", "VARCHAR(120)"),
+            ("conjuge_cpf", "VARCHAR(11)"),
+            ("conjuge_telefone", "VARCHAR(20)"),
+        ):
+            if coluna not in colunas_cliente:
+                await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
+                feitas.append(f"cliente.{coluna} (estado civil e cônjuge)")
+
+        # Entrada e juros da venda. `DEFAULT 0` porque a coluna é NOT NULL e as
+        # vendas que já existem não tinham juros nenhum — zero é a verdade delas.
+        colunas_venda = await _colunas(conexao, "venda")
+        for coluna in ("valor_entrada_centavos", "juros_centesimos"):
+            if coluna not in colunas_venda:
+                await conexao.execute(text(
+                    f"ALTER TABLE venda ADD COLUMN {coluna} INTEGER NOT NULL DEFAULT 0"
+                ))
+                feitas.append(f"venda.{coluna} (entrada gravada e juros da loja)")
+
+        # Campo de observação (anotação livre) em moto, cliente e venda.
+        for tabela in ("moto", "cliente", "venda"):
+            if "observacao" not in await _colunas(conexao, tabela):
+                await conexao.execute(
+                    text(f"ALTER TABLE {tabela} ADD COLUMN observacao VARCHAR(1000)")
+                )
+                feitas.append(f"{tabela}.observacao (anotação livre do dono)")
+
         # O sistema deixou de ter senha: a coluna vira `chave_hash`, e quem
         # já estava no banco ganha uma chave nova (a senha antiga não vira
         # chave — são coisas diferentes, e o hash de bcrypt nem daria).

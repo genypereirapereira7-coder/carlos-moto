@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, String
+from sqlalchemy import Boolean, DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, agora
@@ -24,6 +24,19 @@ class Cliente(Base):
     cpf: Mapped[str] = mapped_column(String(11), nullable=False, unique=True, index=True)
 
     telefone: Mapped[str | None] = mapped_column(String(20))
+
+    # Estado civil e cônjuge. Na venda de veículo o cônjuge costuma assinar
+    # junto, e é ele que a loja procura quando o titular some — por isso nome
+    # e telefone do cônjuge são exigidos quando casado, e o CPF não (nem
+    # sempre a loja tem o documento dele na hora). `None` = não perguntado.
+    casado: Mapped[bool | None] = mapped_column(Boolean)
+    conjuge_nome: Mapped[str | None] = mapped_column(String(120))
+    conjuge_cpf: Mapped[str | None] = mapped_column(String(11))
+    conjuge_telefone: Mapped[str | None] = mapped_column(String(20))
+
+    # Anotação livre sobre o cliente — o que o dono quer lembrar dele.
+    observacao: Mapped[str | None] = mapped_column(String(1000))
+
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=agora
     )

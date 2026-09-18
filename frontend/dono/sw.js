@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v29";
+const VERSAO = "v36";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -25,6 +25,9 @@ const CASCA = [
   "./instalar.js",
   "./dados-motos.js",
   "./marca-modelo.js",
+  "./comprovantes.js",
+  "./conjuge.js",
+  "./observacao.js",
   "./dono.css",
   "./manifest.json",
   "./icones/icone-192.png",
@@ -36,6 +39,7 @@ const CASCA = [
   "./telas/vender.js",
   "./telas/parcelas.js",
   "./telas/financeiro.js",
+  "./telas/antigo.js",
   "../comum/api.js",
   "../comum/fila.js",
   "../comum/cache.js",
@@ -51,7 +55,7 @@ const FORA_DO_CACHE = ["/dono/MigrarCarlosMoto.exe"];
 
 const CAMINHOS_API = [
   "/auth", "/motos", "/vendas", "/clientes", "/parcelas", "/financeiro",
-  "/usuarios", "/relatorios", "/health", "/ws", "/migracao",
+  "/usuarios", "/relatorios", "/health", "/ws", "/migracao", "/antigo",
 ];
 
 self.addEventListener("install", (evento) => {

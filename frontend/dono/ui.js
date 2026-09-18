@@ -52,6 +52,8 @@ export function rotuloFormaPagamento(forma) {
   return {
     A_VISTA: "À vista",
     PARCELADO: "Parcelado (loja)",
+    CHEQUE: "Cheque pré-datado",
+    CARTAO: "Parcelado no cartão",
     FINANCIADO: "Financiado",
     CONSORCIO: "Consórcio",
   }[forma] || forma;

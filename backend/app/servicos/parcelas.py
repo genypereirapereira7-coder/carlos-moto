@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.base import FUSO_DA_LOJA, agora, como_utc, hoje
 from app.models.cliente import Cliente
 from app.models.moto import Moto
+from app.models.pagamento_parcela import PagamentoParcela
 from app.models.parcela import Parcela
 from app.models.venda import Venda
 
@@ -24,6 +25,11 @@ class ParcelaInexistente(Exception):
 class PagamentoAntesDaVenda(Exception):
     """A data de pagamento informada é anterior à própria venda — a parcela
     nem existia ainda."""
+
+
+class PagamentoInvalido(Exception):
+    """O valor do pagamento não cabe: passa do que ainda falta, ou a parcela
+    já está quitada."""
 
 
 async def listar_pendentes(sessao: AsyncSession) -> list[tuple[Parcela, Venda, Cliente, Moto]]:
@@ -51,27 +57,76 @@ def _momento_do_pagamento(dia: date | None) -> datetime:
     return datetime.combine(dia, time(12), tzinfo=FUSO_DA_LOJA).astimezone(UTC)
 
 
+def _nao_antes_da_venda(parcela: Parcela, momento: datetime) -> None:
+    dia_da_venda = como_utc(parcela.venda.data_venda).astimezone(FUSO_DA_LOJA).date()
+    if momento.astimezone(FUSO_DA_LOJA).date() < dia_da_venda:
+        raise PagamentoAntesDaVenda()
+
+
+async def registrar_pagamento(
+    sessao: AsyncSession,
+    parcela_id: uuid.UUID,
+    valor_centavos: int,
+    data_pagamento: date | None = None,
+) -> Parcela:
+    """Lança um pagamento em pedaço: o cliente pagou `valor_centavos` da
+    parcela. Não pode passar do que ainda falta. Quando o pagamento zera o
+    saldo, a parcela fica quitada (`pago_em` marca esse instante); enquanto
+    sobrar saldo, ela continua aberta com o valor abatido."""
+    parcela = await sessao.get(Parcela, parcela_id)
+    if parcela is None:
+        raise ParcelaInexistente()
+    if valor_centavos <= 0 or valor_centavos > parcela.saldo_centavos:
+        raise PagamentoInvalido()
+
+    momento = _momento_do_pagamento(data_pagamento)
+    _nao_antes_da_venda(parcela, momento)
+
+    parcela.pagamentos.append(PagamentoParcela(valor_centavos=valor_centavos, pago_em=momento))
+    # `pago_em` da parcela é o espelho rápido de "quitada?": vira o instante do
+    # pagamento que fechou a conta, e só quando ela realmente fecha. É o que a
+    # lista de pendentes e o histórico leem. Mantido aqui, num lugar só, junto
+    # com o pagamento — pra nunca discordar do extrato.
+    await sessao.flush()
+    if parcela.saldo_centavos == 0:
+        parcela.pago_em = momento
+    await sessao.flush()
+    return parcela
+
+
 async def marcar(
     sessao: AsyncSession,
     parcela_id: uuid.UUID,
     pago: bool,
     data_pagamento: date | None = None,
 ) -> Parcela:
-    """Marca como paga (na data informada, ou hoje) — ou desmarca, quando foi
-    engano. Remarcar uma parcela já paga troca a data: é assim que o dono
-    corrige um pagamento lançado no dia errado."""
+    """Quita a parcela inteira (na data informada, ou hoje) — ou desfaz, quando
+    foi engano. Quitar paga de uma vez tudo o que ainda falta; desfazer estorna
+    o que já tinha sido pago e reabre a parcela. O estorno é uma linha negativa
+    no extrato, não um apagão — o sistema não apaga nada."""
     parcela = await sessao.get(Parcela, parcela_id)
     if parcela is None:
         raise ParcelaInexistente()
 
     if not pago:
+        # Reabre: estorna o que estava pago (linha negativa) e limpa o espelho.
+        pago_ate_agora = parcela.total_pago_centavos
+        if pago_ate_agora > 0:
+            parcela.pagamentos.append(
+                PagamentoParcela(valor_centavos=-pago_ate_agora, pago_em=agora())
+            )
         parcela.pago_em = None
-    else:
-        momento = _momento_do_pagamento(data_pagamento)
-        dia_da_venda = como_utc(parcela.venda.data_venda).astimezone(FUSO_DA_LOJA).date()
-        if momento.astimezone(FUSO_DA_LOJA).date() < dia_da_venda:
-            raise PagamentoAntesDaVenda()
-        parcela.pago_em = momento
+        await sessao.flush()
+        return parcela
 
+    momento = _momento_do_pagamento(data_pagamento)
+    _nao_antes_da_venda(parcela, momento)
+
+    # Quita o que falta de uma vez. Parcela já quitada é no-op — só reafirma a
+    # data, que é como o dono corrige um pagamento lançado no dia errado.
+    falta = parcela.saldo_centavos
+    if falta > 0:
+        parcela.pagamentos.append(PagamentoParcela(valor_centavos=falta, pago_em=momento))
+    parcela.pago_em = momento
     await sessao.flush()
     return parcela

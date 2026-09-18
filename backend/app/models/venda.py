@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, Uuid
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, agora
@@ -13,14 +13,38 @@ from app.models.base import Base, agora
 class FormaPagamento(str, enum.Enum):
     A_VISTA = "A_VISTA"
 
-    # Crediário da própria loja: é a única forma que gera `Parcela` — dinheiro
-    # que ainda vai entrar aos poucos e que o dono precisa cobrar. Financiado
-    # por banco e consórcio já pagam a loja inteira na hora; o parcelamento
-    # deles é entre o cliente e o banco, não é problema da loja acompanhar.
+    # Crediário da própria loja (o "carnê"). Ver `COM_CARNE` abaixo.
     PARCELADO = "PARCELADO"
+
+    # Cheque pré-datado: na prática é o mesmo risco do carnê — a loja entrega
+    # a moto e fica esperando o dinheiro entrar folha a folha. Por isso gera
+    # parcela e aceita avalista igual ao carnê.
+    CHEQUE = "CHEQUE"
+
+    # Parcelado no cartão: a operadora paga a loja, o parcelamento é entre o
+    # cliente e o cartão. A loja não tem o que cobrar depois.
+    CARTAO = "CARTAO"
 
     FINANCIADO = "FINANCIADO"
     CONSORCIO = "CONSORCIO"
+
+
+# As formas em que **a loja carrega a dívida**: entregou a moto e vai receber
+# aos poucos, por conta e risco dela. São as únicas que geram `Parcela` (o
+# carnê que o dono precisa cobrar) e as únicas que aceitam avalista.
+#
+# Financiado por banco, consórcio e cartão ficam de fora porque a loja já
+# recebeu o valor cheio: o parcelamento de lá é problema entre o cliente e a
+# instituição, não há nada pra esta tela acompanhar.
+COM_CARNE = frozenset({FormaPagamento.PARCELADO, FormaPagamento.CHEQUE})
+
+# Formas em que faz sentido a loja cobrar juros do cliente. Nas duas de cima
+# o juro entra no próprio carnê; no cartão e no consórcio é só registro do
+# que foi combinado, porque quem parcela não é a loja.
+COM_JUROS = frozenset(
+    {FormaPagamento.PARCELADO, FormaPagamento.CHEQUE,
+     FormaPagamento.CARTAO, FormaPagamento.CONSORCIO}
+)
 
 
 class Venda(Base):
@@ -51,6 +75,22 @@ class Venda(Base):
     # mas o preço vendido nunca deve.
     preco_venda_centavos: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # O que o cliente deu de entrada no ato. Guardado, e não deduzido de
+    # `preço − soma das parcelas`: com juros no carnê as parcelas somam MAIS
+    # que o saldo financiado, e aquela subtração passaria a mentir justamente
+    # no número que o financeiro usa como "entrou no caixa no dia da venda".
+    valor_entrada_centavos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Juros que a loja cobra pra parcelar, em centésimos de por cento
+    # (5,5% = 550). Inteiro pelo mesmo motivo do dinheiro em centavos: taxa
+    # em float acumula erro de arredondamento e o carnê deixa de fechar.
+    # 0 = sem juros.
+    juros_centesimos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Anotação livre sobre esta venda — o combinado que não cabe nos
+    # campos ("leva o capacete junto", "volta dia 10 pra transferência").
+    observacao: Mapped[str | None] = mapped_column(String(1000))
+
     # O índice vem do `Index` nomeado em `__table_args__` logo abaixo, não de
     # `index=True` aqui — as duas formas geram o mesmo nome pela convenção em
     # `models/base.py`, e o `create_all` recusa criar o mesmo índice duas vezes.
@@ -70,6 +110,12 @@ class Venda(Base):
     parcelas: Mapped[list["Parcela"]] = relationship(
         back_populates="venda", lazy="selectin", order_by="Parcela.numero"
     )
+    # Só existem em venda parcelada no carnê da loja — quem avaliza o crédito
+    # que a loja mesma concedeu. Sem `delete-orphan` pelo mesmo motivo das
+    # parcelas: o sistema não apaga nada.
+    avalistas: Mapped[list["Avalista"]] = relationship(
+        back_populates="venda", lazy="selectin", order_by="Avalista.ordem"
+    )
 
     __table_args__ = (
         CheckConstraint("preco_venda_centavos >= 0", name="preco_venda_nao_negativo"),
@@ -78,8 +124,11 @@ class Venda(Base):
 
     @property
     def parcelado(self) -> bool:
-        return self.forma_pagamento == FormaPagamento.PARCELADO
+        """Tem carnê pra loja cobrar — carnê próprio ou cheque pré-datado."""
+        return self.forma_pagamento in COM_CARNE
 
     @property
     def saldo_devedor_centavos(self) -> int:
-        return sum(p.valor_centavos for p in self.parcelas if p.pago_em is None)
+        # Soma o que falta em cada parcela — parcela paga em parte conta só o
+        # saldo, não o valor cheio.
+        return sum(p.saldo_centavos for p in self.parcelas)

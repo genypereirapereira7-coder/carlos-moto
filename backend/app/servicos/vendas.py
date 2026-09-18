@@ -25,12 +25,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.avalista import Avalista
 from app.models.base import agora, hoje
 from app.models.cliente import Cliente
 from app.models.moto import Moto, StatusMoto
 from app.models.parcela import Parcela
-from app.models.usuario import Usuario
-from app.models.venda import FormaPagamento, Venda
+from app.models.usuario import Papel, Usuario
+from app.models.venda import COM_CARNE, Venda
 from app.schemas.venda import VendaEntrada
 
 
@@ -45,6 +46,11 @@ class MotoInexistente(Exception):
 
 class ClienteInexistente(Exception):
     pass
+
+
+class VendedorInvalido(Exception):
+    """O `vendedor_id` escolhido no formulário não é um vendedor ativo (nem o
+    dono) — não dá pra atribuir a venda a quem não vende na loja."""
 
 
 async def por_id_cliente(sessao: AsyncSession, id_cliente: uuid.UUID) -> Venda | None:
@@ -65,15 +71,34 @@ def _somar_meses(dia: date, meses: int) -> date:
     return date(ano, mes, min(dia.day, ultimo_dia_do_mes))
 
 
+def _com_juros(saldo_centavos: int, juros_centesimos: int) -> int:
+    """O saldo financiado acrescido dos juros da loja.
+
+    Juro simples sobre o saldo: R$ 1.000 a 10% viram R$ 1.100 divididos nas
+    parcelas. É a conta que a loja faz de cabeça no balcão — e a tela mostra
+    o total antes de confirmar, pra não haver surpresa no carnê.
+
+    A divisão inteira arredonda pra baixo (centavo não se parte), então o
+    cliente nunca paga um centavo a mais do que a conta fecha.
+    """
+    if juros_centesimos <= 0:
+        return saldo_centavos
+    # `// 10_000` porque o juro está em centésimos de por cento: 550 = 5,5%.
+    return saldo_centavos + (saldo_centavos * juros_centesimos) // 10_000
+
+
 def _gerar_parcelas(entrada: VendaEntrada) -> list[Parcela]:
-    """Divide o saldo (preço - entrada) em N parcelas mensais iguais.
+    """Divide o saldo (preço - entrada, mais juros) em N parcelas mensais iguais.
 
     O resto da divisão inteira vai pra última parcela — nunca pra primeira —
     porque é a última que o cliente vai conferir contra "quanto falta", e
     fechar exatamente redondo aí evita a pergunta "por que essa é 1 centavo
     diferente das outras".
     """
-    saldo = entrada.preco_venda_centavos - entrada.valor_entrada_centavos
+    saldo = _com_juros(
+        entrada.preco_venda_centavos - entrada.valor_entrada_centavos,
+        entrada.juros_centesimos,
+    )
     n = entrada.numero_parcelas or 1
     valor_base = saldo // n
     resto = saldo - valor_base * n
@@ -87,6 +112,11 @@ def _gerar_parcelas(entrada: VendaEntrada) -> list[Parcela]:
                 numero=i + 1,
                 valor_centavos=valor,
                 vencimento=_somar_meses(primeiro_vencimento, i),
+                # Vazio e explícito: a parcela nasce nesta sessão e nunca foi
+                # carregada por query, então sem isto ler `saldo_centavos` (que
+                # olha `pagamentos`) viraria lazy-load fora do contexto async e
+                # cairia com MissingGreenlet ao montar a resposta da venda.
+                pagamentos=[],
             )
         )
     return parcelas
@@ -105,7 +135,17 @@ async def criar_venda(
     cliente = await sessao.get(Cliente, entrada.cliente_id)
     if cliente is None:
         raise ClienteInexistente()
-    vendedor = await sessao.get(Usuario, vendedor_id)
+
+    # Quem a venda credita: o vendedor escolhido no formulário quando veio um,
+    # senão quem está logado. O escolhido precisa ser um vendedor ativo (ou o
+    # próprio dono) — a tela não deixa mandar outra coisa, mas a API confere.
+    vendedor = await sessao.get(Usuario, entrada.vendedor_id or vendedor_id)
+    if entrada.vendedor_id is not None and (
+        vendedor is None
+        or not vendedor.ativo
+        or vendedor.papel not in (Papel.VENDEDOR, Papel.DONO)
+    ):
+        raise VendedorInvalido()
 
     async with sessao.begin_nested():
         moto = (
@@ -131,13 +171,31 @@ async def criar_venda(
             cliente=cliente,
             forma_pagamento=entrada.forma_pagamento,
             preco_venda_centavos=entrada.preco_venda_centavos,
+            valor_entrada_centavos=entrada.valor_entrada_centavos,
+            juros_centesimos=entrada.juros_centesimos,
+            observacao=entrada.observacao,
             data_venda=entrada.data_venda or agora(),
         )
         # Sempre atribuído — mesmo vazio — pelo mesmo motivo do bloco acima:
         # depois do `flush()` a venda deixa de ser "pending" e uma coleção
         # nunca tocada vira lazy-load em vez de lista vazia em memória.
-        venda.parcelas = (
-            _gerar_parcelas(entrada) if entrada.forma_pagamento == FormaPagamento.PARCELADO else []
+        parcelado = entrada.forma_pagamento in COM_CARNE
+        venda.parcelas = _gerar_parcelas(entrada) if parcelado else []
+        # Avalistas só em venda parcelada — o schema já recusa o contrário; aqui
+        # é a segunda barreira. Numerados na ordem em que vieram do formulário.
+        venda.avalistas = (
+            [
+                Avalista(
+                    ordem=i + 1,
+                    nome=a.nome,
+                    cpf=a.cpf,
+                    telefone=a.telefone,
+                    endereco=a.endereco,
+                )
+                for i, a in enumerate(entrada.avalistas)
+            ]
+            if parcelado
+            else []
         )
 
         try:
