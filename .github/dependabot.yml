@@ -1,0 +1,9 @@
+# Avisa (e abre PR) quando sair correção de segurança de dependência.
+# Gratuito, inclusive em repositório privado.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

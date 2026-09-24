@@ -198,7 +198,7 @@ async def test_a_variavel_da_chave_vale_pra_conta_que_ja_existe(engine, dados, m
     from app.seguranca import hash_chave
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    nova = "39S7-D88Q-W4HC-GYFE"
+    nova = "TEST-CHAV-EDET-ESTE"
     await _rodar_garantir_dono(engine, monkeypatch, chave_dono=nova)
 
     fabrica = async_sessionmaker(engine, expire_on_commit=False)
@@ -212,12 +212,12 @@ async def test_a_variavel_aceita_a_chave_digitada_torta(engine, dados, monkeypat
     from app.seguranca import hash_chave
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    await _rodar_garantir_dono(engine, monkeypatch, chave_dono="  39s7 d88q w4hc gyfe ")
+    await _rodar_garantir_dono(engine, monkeypatch, chave_dono="  test chav edet este ")
 
     fabrica = async_sessionmaker(engine, expire_on_commit=False)
     async with fabrica() as s:
         dono = await _dono_de(s)
-        assert dono.chave_hash == hash_chave("39S7-D88Q-W4HC-GYFE")
+        assert dono.chave_hash == hash_chave("TEST-CHAV-EDET-ESTE")
 
 
 async def test_subir_de_novo_com_a_mesma_variavel_nao_mexe_em_nada(engine, dados, monkeypatch):
@@ -225,7 +225,7 @@ async def test_subir_de_novo_com_a_mesma_variavel_nao_mexe_em_nada(engine, dados
     chave "trocaria" pela mesma, poluindo o log com um alarme falso."""
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    nova = "39S7-D88Q-W4HC-GYFE"
+    nova = "TEST-CHAV-EDET-ESTE"
     await _rodar_garantir_dono(engine, monkeypatch, chave_dono=nova)
 
     fabrica = async_sessionmaker(engine, expire_on_commit=False)
