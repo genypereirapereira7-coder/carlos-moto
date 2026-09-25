@@ -6,14 +6,14 @@
        da barrinha de baixo. O CSS devolve o espaço com `env(safe-area-inset-*)`
        — sem isto sobram faixas pretas em cima e embaixo do app instalado. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Carlos Moto — Dono</title>
+  <title>Monte São Motos — Dono</title>
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#151311" />
   <!-- O iPhone não lê tudo do manifesto: o "abre como app", o nome embaixo do
        ícone e a cor da barra de status vêm destas linhas. -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Carlos Moto" />
+  <meta name="apple-mobile-web-app-title" content="Monte São Motos" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" href="./icones/icone-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="./icones/apple-touch-icon.png" />
@@ -23,7 +23,7 @@
 <body>
   <div id="tela-login" class="tela-login">
     <form id="form-login" class="cartao-login cartao">
-      <h1>Carlos Moto</h1>
+      <h1>Monte São Motos</h1>
       <p class="fraco">Painel do dono</p>
       <label class="campo">
         Chave de acesso
@@ -49,7 +49,7 @@
     <nav class="lateral" aria-label="Menu principal">
       <div class="marca">
         <span class="ponto" id="ponto-conexao" data-estado="offline"></span>
-        <span class="marca-nome">Carlos Moto</span>
+        <span class="marca-nome">Monte São Motos</span>
       </div>
 
       <div class="abas-principais">
@@ -98,13 +98,6 @@
         <button id="botao-instalar" class="botao botao--instalar" type="button" hidden>
           Instalar no computador
         </button>
-        <!-- PROVISÓRIO: saem depois da virada do sistema antigo. -->
-        <button id="botao-migracao" class="botao botao--fantasma" type="button" hidden>
-          Migrar sistema antigo
-        </button>
-        <button id="botao-antigo" class="botao botao--fantasma" type="button">
-          Sistema antigo
-        </button>
         <button id="botao-acesso" class="botao botao--fantasma" type="button">
           Chave e aparelhos
         </button>
@@ -136,6 +129,9 @@
   </div>
 
   <div id="aviso" class="aviso" data-visivel="0"></div>
+
+  <!-- Atualização do app. Nunca vai pro cache — ver o comentário no arquivo. -->
+  <script src="./versao.js"></script>
 
   <script type="module" src="./app.js"></script>
 </body>

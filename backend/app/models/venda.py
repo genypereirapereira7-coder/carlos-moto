@@ -38,13 +38,10 @@ class FormaPagamento(str, enum.Enum):
 # instituição, não há nada pra esta tela acompanhar.
 COM_CARNE = frozenset({FormaPagamento.PARCELADO, FormaPagamento.CHEQUE})
 
-# Formas em que faz sentido a loja cobrar juros do cliente. Nas duas de cima
-# o juro entra no próprio carnê; no cartão e no consórcio é só registro do
-# que foi combinado, porque quem parcela não é a loja.
-COM_JUROS = frozenset(
-    {FormaPagamento.PARCELADO, FormaPagamento.CHEQUE,
-     FormaPagamento.CARTAO, FormaPagamento.CONSORCIO}
-)
+# Juros da loja também só existe em `COM_CARNE`, e é por isso que não há uma
+# lista separada: quem parcela no cartão ou no consórcio é a operadora, não a
+# loja — o juro de lá é entre o cliente e eles, e registrar isso aqui seria
+# guardar um número que a loja não cobra nem recebe.
 
 
 class Venda(Base):

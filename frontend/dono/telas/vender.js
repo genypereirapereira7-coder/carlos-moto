@@ -107,7 +107,7 @@ export function abrirModalVenda(moto, aoVender) {
             <input name="juros" type="number" step="0.01" min="0" max="100" value="0" />
           </label>
         </div>
-        <p class="previa" id="previa-juros"></p>
+        <div class="conta-juros" id="previa-juros"></div>
       </fieldset>
 
       <fieldset id="bloco-parcelas" class="bloco" hidden>
@@ -284,11 +284,11 @@ export function abrirModalVenda(moto, aoVender) {
 
   // ------------------------------------------------------------ parcelas
 
-  // As formas em que a loja carrega a dívida (gera carnê pra cobrar) e
-  // aquelas em que ela cobra juros. Precisa bater com `COM_CARNE`/`COM_JUROS`
-  // do servidor — é ele que recusa o que não combina.
+  // As formas em que a loja carrega a dívida: gera carnê pra cobrar, aceita
+  // avalista e é onde existe juros da loja. Precisa bater com `COM_CARNE` do
+  // servidor. No cartão e no consórcio quem parcela é a operadora, então não
+  // há juro da loja a cobrar.
   const COM_CARNE = ["PARCELADO", "CHEQUE"];
-  const COM_JUROS = ["PARCELADO", "CHEQUE", "CARTAO", "CONSORCIO"];
 
   const blocoJuros = modal.querySelector("#bloco-juros");
   const previaJuros = modal.querySelector("#previa-juros");
@@ -309,20 +309,16 @@ export function abrirModalVenda(moto, aoVender) {
     const forma = form.elements.forma_pagamento.value;
     const temCarne = COM_CARNE.includes(forma);
     blocoParcelas.hidden = !temCarne;
-    blocoJuros.hidden = !COM_JUROS.includes(forma);
+    blocoJuros.hidden = !COM_CARNE.includes(forma);
 
-    if (!COM_JUROS.includes(forma)) {
+    if (!COM_CARNE.includes(forma)) {
       // Forma sem juros: zera pra não mandar juro de uma escolha anterior.
       form.elements.juros.value = "0";
-      previaJuros.textContent = "";
+      previaJuros.innerHTML = "";
     }
     if (!temCarne) {
       previa.textContent = "";
-      if (!blocoJuros.hidden) {
-        previaJuros.textContent = jurosCentesimos()
-          ? "Só fica registrado no contrato — quem parcela aqui não é a loja."
-          : "";
-      }
+      previaJuros.innerHTML = "";
       return;
     }
 
@@ -333,14 +329,28 @@ export function abrirModalVenda(moto, aoVender) {
 
     if (saldo <= 0 || !quantas || quantas < 1) {
       previa.textContent = "";
-      previaJuros.textContent = "";
+      previaJuros.innerHTML = "";
       return;
     }
 
     const total = comJuros(saldo);
-    previaJuros.textContent = total > saldo
-      ? `Financiado ${reais(saldo)} + juros ${reais(total - saldo)} = ${reais(total)} a receber`
-      : "Sem juros — o cliente paga o saldo financiado.";
+    // A conta aberta, linha a linha, embaixo do campo de juros: o que está
+    // sendo financiado, quanto o juros acrescenta, e quanto o cliente vai
+    // pagar no fim. É o número que ele vai conferir no balcão.
+    const acrescimo = total - saldo;
+    previaJuros.innerHTML = acrescimo > 0
+      ? `
+        <div class="conta-linha"><span>Financiado</span><span>${reais(saldo)}</span></div>
+        <div class="conta-linha conta-linha--soma">
+          <span>Juros de ${(jurosCentesimos() / 100).toFixed(2).replace(".", ",")}%</span>
+          <span>+ ${reais(acrescimo)}</span>
+        </div>
+        <div class="conta-linha conta-linha--total">
+          <span>Total a receber</span><span>${reais(total)}</span>
+        </div>`
+      : `<div class="conta-linha conta-linha--total">
+           <span>Total a receber <span class="fraco">(sem juros)</span></span><span>${reais(saldo)}</span>
+         </div>`;
 
     // A última parcela leva o resto da divisão — igual ao servidor faz.
     const base = Math.floor(total / quantas);
@@ -517,7 +527,7 @@ export function abrirModalVenda(moto, aoVender) {
     // meio-dia no relógio de quem está usando — só a data seria lida como
     // meia-noite UTC, que no Brasil ainda é o dia anterior.
     if (dataVenda !== hojeIso()) corpo.data_venda = new Date(`${dataVenda}T12:00:00`).toISOString();
-    if (COM_JUROS.includes(forma) && jurosCentesimos()) corpo.juros_centesimos = jurosCentesimos();
+    if (COM_CARNE.includes(forma) && jurosCentesimos()) corpo.juros_centesimos = jurosCentesimos();
     if (parcelado) {
       corpo.numero_parcelas = Number(quantas);
       corpo.valor_entrada_centavos = centavos(entrada);

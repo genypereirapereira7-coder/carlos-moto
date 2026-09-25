@@ -6,13 +6,11 @@ import { avisar } from "./ui.js";
 import { atualizarContador, sincronizar } from "./fila-ui.js";
 import { abrirPainelDeAcesso } from "./acesso.js";
 import * as instalar from "./instalar.js";
-import { oferecerMigracao } from "./migracao.js";
 import { marcarErro, limparErros } from "./validacao.js";
 import { renderMotos } from "./telas/motos.js";
 import { renderClientes } from "./telas/clientes.js";
 import { renderParcelas } from "./telas/parcelas.js";
 import { renderFinanceiro } from "./telas/financeiro.js";
-import { renderAntigo } from "./telas/antigo.js";
 
 const telaLogin = document.getElementById("tela-login");
 const app = document.getElementById("app");
@@ -25,7 +23,6 @@ const TELAS = {
   clientes: renderClientes,
   parcelas: renderParcelas,
   financeiro: renderFinanceiro,
-  antigo: renderAntigo,
 };
 
 let abaAtual = null;
@@ -88,8 +85,6 @@ function mostrarApp(nome) {
   atualizarContador();
   sincronizar();
   oferecerInstalacao();
-  // O botão só aparece onde o sistema antigo está — ver `migracao.js`.
-  oferecerMigracao();
 }
 
 function mostrarLogin() {
@@ -132,7 +127,6 @@ document.getElementById("form-login").addEventListener("submit", async (evento) 
 });
 
 document.getElementById("botao-acesso").addEventListener("click", abrirPainelDeAcesso);
-document.getElementById("botao-antigo").addEventListener("click", () => abrirAba("antigo"));
 
 document.getElementById("botao-sair").addEventListener("click", async () => {
   await api.sair();
@@ -296,8 +290,7 @@ if (api.estaLogado()) {
 // Registra o service worker por último: é só o que deixa o app abrir sem
 // internet e aparecer como instalável — não deve atrasar nem quebrar o
 // primeiro carregamento se falhar.
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch((erro) => {
-    console.warn("[dono] service worker não registrou", erro);
-  });
-}
+// O registro do service worker e a atualização automática moram no
+// `index.html`, via `versao.js`. O motivo está comentado lá: código de
+// atualização dentro de um arquivo que o próprio cache serve não consegue
+// se atualizar.

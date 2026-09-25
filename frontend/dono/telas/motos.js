@@ -96,8 +96,7 @@ export async function renderMotos(raiz) {
   raiz.innerHTML = `
     <h2>Motos</h2>
     <div class="barra-busca">
-      <input id="busca-placa" placeholder="Buscar pela placa (ex: ABC1D23)" autocomplete="off" />
-      <button class="botao" id="botao-buscar-placa" type="button">Buscar</button>
+      <input id="busca-placa" placeholder="Digite a placa (ABC1234 ou ABC1D23)" autocomplete="off" maxlength="8" />
       <button class="botao botao--fantasma" id="botao-nova-moto" type="button">Cadastrar moto</button>
     </div>
     <div id="detalhe-moto"></div>
@@ -215,6 +214,7 @@ export async function renderMotos(raiz) {
             ${m.status === "DISPONIVEL" ? '<button class="botao" id="botao-vender-moto" type="button">Vender</button>' : ""}
             <button class="botao botao--fantasma" id="botao-editar-moto" type="button">Editar</button>
             <button class="botao botao--fantasma" id="botao-lancar-despesa" type="button">Lançar gasto</button>
+            <button class="botao botao--fantasma" id="botao-fechar-moto" type="button">Fechar</button>
           </div>
         </div>
         <dl class="linhas-dados">
@@ -270,6 +270,14 @@ export async function renderMotos(raiz) {
   }
 
   function plugarAcoesDoDetalhe(moto) {
+    raiz.querySelector("#botao-fechar-moto")?.addEventListener("click", () => {
+      // Fecha a ficha e limpa a busca — senão a mesma placa não reabre.
+      motoAbertaId = null;
+      detalheEl().innerHTML = "";
+      const campo = raiz.querySelector("#busca-placa");
+      if (campo) campo.value = "";
+      ultimaPlacaBuscada = "";
+    });
     raiz.querySelector("#botao-editar-moto")?.addEventListener("click", () => abrirModalEditar(moto));
     raiz.querySelector("#botao-lancar-despesa")?.addEventListener("click", () => abrirModalDespesa(moto));
     raiz.querySelector("#botao-vender-moto")?.addEventListener("click", () => {
@@ -624,12 +632,32 @@ export async function renderMotos(raiz) {
   }
 
   raiz.querySelector("#botao-nova-moto").addEventListener("click", abrirModalNovaMoto);
-  raiz.querySelector("#botao-buscar-placa").addEventListener("click", () => {
-    const placa = raiz.querySelector("#busca-placa").value.trim();
-    if (placa) abrirDetalhe(placa, { porPlaca: true });
-  });
-  raiz.querySelector("#busca-placa").addEventListener("keydown", (evento) => {
-    if (evento.key === "Enter") raiz.querySelector("#botao-buscar-placa").click();
+  // Placa completa abre a moto sozinha — sem botão. Os dois formatos do
+  // Brasil têm 7 caracteres: `ABC1234` (antigo) e `ABC1D23` (Mercosul).
+  // Enquanto não fecha o formato, não adianta bater no servidor.
+  const PLACA_COMPLETA = /^[A-Z]{3}\d[A-Z0-9]\d{2}$/;
+  const campoPlaca = raiz.querySelector("#busca-placa");
+  let timerPlaca = null;
+  let ultimaPlacaBuscada = "";
+
+  campoPlaca.addEventListener("input", () => {
+    // Maiúscula e sem traço enquanto digita: a placa é gravada assim, e quem
+    // digita olhando o documento escreve de todo jeito.
+    const limpa = campoPlaca.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (campoPlaca.value !== limpa) campoPlaca.value = limpa;
+
+    clearTimeout(timerPlaca);
+    if (!PLACA_COMPLETA.test(limpa)) {
+      ultimaPlacaBuscada = "";
+      return;
+    }
+    if (limpa === ultimaPlacaBuscada) return;
+    // Espera a digitação parar: sem isso, completar a placa e corrigir o
+    // último caractere dispararia duas buscas.
+    timerPlaca = setTimeout(() => {
+      ultimaPlacaBuscada = limpa;
+      abrirDetalhe(limpa, { porPlaca: true });
+    }, 250);
   });
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");

@@ -35,6 +35,7 @@ from app.models.moto import Moto
 from app.models.pagamento_parcela import PagamentoParcela
 from app.models.parcela import Parcela
 from app.models.venda import COM_CARNE, FormaPagamento, Venda
+from app.servicos.parcelas import pago_por_parcela, saldo_da_parcela
 from app.schemas.financeiro import (
     DiaFinanceiro,
     FinanceiroMes,
@@ -256,8 +257,18 @@ def _lucro_nas_vendas(vendas: list[Venda]) -> tuple[int, int]:
 
 
 async def _a_receber(sessao: AsyncSession) -> int:
-    consulta = select(func.coalesce(func.sum(Parcela.valor_centavos), 0)).where(
-        Parcela.pago_em.is_(None)
+    """Quanto ainda falta entrar de todo o carnê da loja.
+
+    O que **falta** em cada parcela, não o valor cheio dela: parcela paga pela
+    metade tem só metade a receber. Sem isto o número do painel fica inflado
+    exatamente no valor que os clientes já adiantaram.
+    """
+    pago = pago_por_parcela()
+    consulta = (
+        select(func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
+        .select_from(Parcela)
+        .outerjoin(pago, pago.c.parcela_id == Parcela.id)
+        .where(Parcela.pago_em.is_(None))
     )
     return int((await sessao.execute(consulta)).scalar_one())
 

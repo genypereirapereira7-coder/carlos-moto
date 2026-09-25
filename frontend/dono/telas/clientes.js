@@ -42,8 +42,7 @@ export async function renderClientes(raiz) {
   raiz.innerHTML = `
     <h2>Clientes</h2>
     <div class="barra-busca">
-      <input id="busca-cliente" placeholder="Buscar por nome ou CPF" autocomplete="off" value="${escapar(buscaAtual)}" />
-      <button class="botao" id="botao-buscar-cliente" type="button">Buscar</button>
+      <input id="busca-cliente" placeholder="Digite o nome ou o CPF" autocomplete="off" value="${escapar(buscaAtual)}" />
       <button class="botao botao--fantasma" id="botao-novo-cliente" type="button">Cadastrar cliente</button>
     </div>
     <div id="detalhe-cliente"></div>
@@ -398,12 +397,16 @@ export async function renderClientes(raiz) {
   // ------------------------------------------------------------- ligações
 
   raiz.querySelector("#botao-novo-cliente").addEventListener("click", abrirModalNovo);
-  raiz.querySelector("#botao-buscar-cliente").addEventListener("click", async () => {
-    buscaAtual = raiz.querySelector("#busca-cliente").value.trim();
-    await carregarLista();
-  });
-  raiz.querySelector("#busca-cliente").addEventListener("keydown", (evento) => {
-    if (evento.key === "Enter") raiz.querySelector("#botao-buscar-cliente").click();
+  // Busca enquanto digita — sem botão. Espera a digitação parar, senão seria
+  // uma chamada por tecla apertada.
+  let timerBuscaCliente = null;
+  raiz.querySelector("#busca-cliente").addEventListener("input", (evento) => {
+    const termo = evento.target.value.trim();
+    clearTimeout(timerBuscaCliente);
+    timerBuscaCliente = setTimeout(async () => {
+      buscaAtual = termo;
+      await carregarLista();
+    }, 300);
   });
   raiz.querySelector("#filtro-clientes").addEventListener("click", (evento) => {
     const botao = evento.target.closest(".aba-filtro");

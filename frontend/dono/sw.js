@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v36";
+const VERSAO = "v48";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -21,7 +21,6 @@ const CASCA = [
   "./validacao.js",
   "./fila-ui.js",
   "./acesso.js",
-  "./migracao.js",
   "./instalar.js",
   "./dados-motos.js",
   "./marca-modelo.js",
@@ -39,7 +38,6 @@ const CASCA = [
   "./telas/vender.js",
   "./telas/parcelas.js",
   "./telas/financeiro.js",
-  "./telas/antigo.js",
   "../comum/api.js",
   "../comum/fila.js",
   "../comum/cache.js",
@@ -49,13 +47,13 @@ const CASCA = [
   "../comum/estilo.css",
 ];
 
-// O clonador tem 11 MB e é baixado uma vez na vida: guardar no cache do
-// navegador seria ocupar o disco de todo mundo à toa.
-const FORA_DO_CACHE = ["/dono/MigrarCarlosMoto.exe"];
+// `versao.js` é o código que conserta uma versão velha — guardá-lo no cache
+// seria prendê-lo dentro da versão que ele deveria consertar. Sempre da rede.
+const FORA_DO_CACHE = ["/dono/versao.js"];
 
 const CAMINHOS_API = [
   "/auth", "/motos", "/vendas", "/clientes", "/parcelas", "/financeiro",
-  "/usuarios", "/relatorios", "/health", "/ws", "/migracao", "/antigo",
+  "/usuarios", "/relatorios", "/health", "/ws",
 ];
 
 self.addEventListener("install", (evento) => {
@@ -85,6 +83,13 @@ self.addEventListener("activate", (evento) => {
       await self.clients.claim();
     })(),
   );
+});
+
+// A página pede pra versão nova assumir na hora. O `skipWaiting` do install
+// já resolve o caso normal; isto cobre o service worker que ficou parado
+// esperando — sem ele, o dono continuaria na versão velha sem entender por quê.
+self.addEventListener("message", (evento) => {
+  if (evento.data?.tipo === "assumir") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (evento) => {

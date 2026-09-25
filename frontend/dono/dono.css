@@ -313,6 +313,52 @@ table.tabela tbody tr {
 .selo--pendente { background: var(--amarelo-fundo); color: var(--amarelo); }
 .selo--atrasada { background: var(--vermelho-fundo); color: var(--vermelho); }
 
+/* A conta do juros, aberta embaixo do campo de percentual: o que está sendo
+   financiado, quanto o juros acrescenta e o total. Alinhada à direita porque
+   é dinheiro — os valores têm que bater na vertical pra conferir de bate-pronto. */
+.conta-juros {
+  margin-top: 10px;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--fundo);
+}
+
+.conta-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.conta-linha span:last-child {
+  font-weight: 600;
+}
+
+.conta-linha--soma span:last-child {
+  color: var(--amarelo);
+}
+
+.conta-linha--total {
+  border-top: 1px solid var(--linha);
+  margin-top: 4px;
+  padding-top: 8px;
+  font-size: 16px;
+}
+
+.conta-linha--total span:last-child {
+  font-weight: 800;
+  color: var(--verde);
+}
+
+/* Aviso de WhatsApp embaixo do telefone. Discreto de propósito: é ajuda,
+   não obstáculo — o cadastro segue igual se o número não tiver WhatsApp. */
+.wa-aviso { font-size: 12px; margin: 2px 0 0; font-weight: 600; }
+.wa-tem { color: var(--verde); }
+.wa-nao { color: var(--amarelo); }
+
 .texto-devendo { color: var(--vermelho); font-weight: 700; }
 .texto-a-vencer { color: var(--amarelo); font-weight: 700; }
 

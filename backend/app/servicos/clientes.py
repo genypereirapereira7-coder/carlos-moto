@@ -11,6 +11,7 @@ from app.models.cliente import Cliente
 from app.models.moto import Moto
 from app.models.parcela import Parcela
 from app.models.venda import Venda
+from app.servicos.parcelas import pago_por_parcela, saldo_da_parcela
 from app.schemas.cliente import ClienteEntrada
 
 
@@ -69,9 +70,11 @@ async def editar(sessao: AsyncSession, cliente: Cliente, campos: dict) -> Client
 
 
 async def _saldo_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict[int, int]:
+    pago = pago_por_parcela()
     consulta = (
-        select(Venda.cliente_id, func.coalesce(func.sum(Parcela.valor_centavos), 0))
+        select(Venda.cliente_id, func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Parcela, Parcela.venda_id == Venda.id)
+        .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(Parcela.pago_em.is_(None), Venda.cliente_id.in_(ids))
         .group_by(Venda.cliente_id)
     )
@@ -80,9 +83,11 @@ async def _saldo_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict[int, 
 
 async def _saldo_atrasado_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict[int, int]:
     """Só as parcelas que já passaram do vencimento, no dia da loja."""
+    pago = pago_por_parcela()
     consulta = (
-        select(Venda.cliente_id, func.coalesce(func.sum(Parcela.valor_centavos), 0))
+        select(Venda.cliente_id, func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Parcela, Parcela.venda_id == Venda.id)
+        .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(
             Parcela.pago_em.is_(None),
             Parcela.vencimento < hoje(),
@@ -156,9 +161,11 @@ async def listar(sessao: AsyncSession, *, busca: str | None = None) -> list[Resu
 
 async def saldo_devedor(sessao: AsyncSession, cliente_id: int) -> int:
     """Quanto este cliente ainda deve, somando toda parcela não paga."""
+    pago = pago_por_parcela()
     consulta = (
-        select(func.coalesce(func.sum(Parcela.valor_centavos), 0))
+        select(func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Venda, Venda.id == Parcela.venda_id)
+        .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(Venda.cliente_id == cliente_id, Parcela.pago_em.is_(None))
     )
     return int((await sessao.execute(consulta)).scalar_one())

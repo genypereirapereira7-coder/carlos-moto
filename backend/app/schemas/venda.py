@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
-from app.models.venda import COM_CARNE, COM_JUROS, FormaPagamento
+from app.models.venda import COM_CARNE, FormaPagamento
 from app.schemas.avalista import AvalistaEntrada, AvalistaSaida
 from app.schemas.moto import MotoSaida
 from app.schemas.parcela import ParcelaSaida
@@ -40,7 +40,8 @@ class VendaEntrada(BaseModel):
     primeiro_vencimento: date | None = None
 
     # Juros da loja em centésimos de por cento (5,5% = 550). Teto de 100% pra
-    # barrar o zero a mais digitado sem querer. Ver `COM_JUROS`.
+    # barrar o zero a mais digitado sem querer. Só vale no carnê e no
+    # cheque — ver `COM_CARNE`.
     juros_centesimos: int = Field(default=0, ge=0, le=10_000)
 
     # Anotação livre sobre a venda. Não sai nos documentos.
@@ -67,8 +68,11 @@ class VendaEntrada(BaseModel):
             # consórcio e cartão já pagaram a loja; à vista não há dívida.
             raise ValueError("Avalista só entra em venda no carnê da loja ou em cheque")
 
-        if self.juros_centesimos and self.forma_pagamento not in COM_JUROS:
-            raise ValueError("Essa forma de pagamento não tem juros da loja")
+        if self.juros_centesimos and self.forma_pagamento not in COM_CARNE:
+            raise ValueError(
+                "Juros da loja só existe no carnê da loja e no cheque — "
+                "no cartão e no consórcio quem parcela é a operadora"
+            )
         return self
 
 

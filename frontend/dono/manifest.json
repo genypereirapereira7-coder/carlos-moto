@@ -1,7 +1,7 @@
 {
-  "name": "Carlos Moto Dono",
-  "short_name": "Carlos Moto",
-  "description": "Painel do dono: motos, clientes, parcelas e financeiro da Carlos Moto.",
+  "name": "Monte São Motos — Dono",
+  "short_name": "Monte São Motos",
+  "description": "Painel do dono: motos, clientes, parcelas e financeiro da Monte São Motos.",
   "start_url": "./",
   "scope": "./",
   "id": "/dono/",

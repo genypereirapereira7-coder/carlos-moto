@@ -86,11 +86,22 @@ async def test_juros_em_forma_que_nao_tem_juros_e_recusado(cliente, dados, entra
 async def test_cartao_nao_gera_carne(cliente, dados, entrar):
     cabecalho = await entrar(dados["joao"].id)
     r = await cliente.post("/vendas", json=_venda(
-        dados["cg160"].id, dados["maria"].id,
-        forma_pagamento="CARTAO", juros_centesimos=300,
+        dados["cg160"].id, dados["maria"].id, forma_pagamento="CARTAO",
     ), headers=cabecalho)
     assert r.status_code == 201, r.text
     assert r.json()["parcelas"] == []
+
+
+async def test_juros_da_loja_nao_existe_no_cartao_nem_no_consorcio(cliente, dados, entrar):
+    """Quem parcela no cartão e no consórcio é a operadora, não a loja — não
+    há juro da loja pra cobrar, e guardar um seria inventar número."""
+    cabecalho = await entrar(dados["joao"].id)
+    for forma in ("CARTAO", "CONSORCIO"):
+        r = await cliente.post("/vendas", json=_venda(
+            dados["cg160"].id, dados["maria"].id,
+            forma_pagamento=forma, juros_centesimos=300,
+        ), headers=cabecalho)
+        assert r.status_code == 422, f"{forma} não devia aceitar juros da loja"
 
 
 async def test_avalista_sem_telefone_e_recusado(cliente, dados, entrar):

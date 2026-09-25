@@ -7,7 +7,7 @@ buscar os três em três chamadas separadas."""
 import uuid
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import FUSO_DA_LOJA, agora, como_utc, hoje
@@ -30,6 +30,29 @@ class PagamentoAntesDaVenda(Exception):
 class PagamentoInvalido(Exception):
     """O valor do pagamento não cabe: passa do que ainda falta, ou a parcela
     já está quitada."""
+
+
+def pago_por_parcela():
+    """Subconsulta: quanto já entrou em cada parcela.
+
+    Existe porque "quanto o cliente deve" não é a soma do valor das parcelas
+    em aberto — é a soma do que **falta** nelas. Sem descontar o que já foi
+    pago em pedaços, quem pagou metade de uma parcela de R$ 300 aparece
+    devendo os R$ 300, e o "a receber" do financeiro fica inflado.
+    """
+    return (
+        select(
+            PagamentoParcela.parcela_id.label("parcela_id"),
+            func.coalesce(func.sum(PagamentoParcela.valor_centavos), 0).label("pago"),
+        )
+        .group_by(PagamentoParcela.parcela_id)
+        .subquery()
+    )
+
+
+def saldo_da_parcela(pago_sub):
+    """Expressão SQL do que falta numa parcela: valor menos o já pago."""
+    return Parcela.valor_centavos - func.coalesce(pago_sub.c.pago, 0)
 
 
 async def listar_pendentes(sessao: AsyncSession) -> list[tuple[Parcela, Venda, Cliente, Moto]]:
