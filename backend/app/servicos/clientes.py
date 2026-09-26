@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,25 +121,69 @@ async def _qtd_vendeu_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict[
 # ---------------------------------------------------------------- consultas
 
 
-async def listar(sessao: AsyncSession, *, busca: str | None = None) -> list[ResumoDoCliente]:
-    """Clientes em ordem alfabética, já com saldo devedor e contagens.
+def _filtro_de_busca(busca: str | None):
+    """O que a pessoa digitou no campo único da tela: nome ou CPF.
 
     A busca aceita nome (parcial, sem diferenciar caixa) ou CPF (com ou sem
     pontuação — só os dígitos importam): a tela tem um campo só, e quem
     decide o que a pessoa quis dizer é aqui."""
+    if not busca:
+        return None
+    digitos = _so_digitos(busca)
+    if digitos and len(digitos) >= 3:
+        return or_(Cliente.cpf.contains(digitos), Cliente.nome.ilike(f"%{busca}%"))
+    return Cliente.nome.ilike(f"%{busca}%")
+
+
+def _filtro_de_relacao(filtro: str | None):
+    """"Comprou" e "vendeu" do ponto de vista do cliente, em SQL.
+
+    Ficava no navegador, filtrando a lista que estava na tela. Isso funcionava
+    enquanto a lista era a loja inteira; com a lista por página, filtrar só o
+    que está carregado mostraria "3 clientes que compraram" quando existem
+    trezentos. `EXISTS` porque a pergunta é "tem alguma?", não "quantas?".
+    """
+    if filtro == "comprou":
+        return exists().where(Venda.cliente_id == Cliente.id)
+    if filtro == "vendeu":
+        return exists().where(Moto.fornecedor_cliente_id == Cliente.id)
+    return None
+
+
+async def listar(
+    sessao: AsyncSession,
+    *,
+    busca: str | None = None,
+    filtro: str | None = None,
+    pagina: int = 1,
+    por_pagina: int = 50,
+) -> tuple[list[ResumoDoCliente], int]:
+    """Uma página de clientes em ordem alfabética, com saldo devedor e
+    contagens, mais o total que deu na busca.
+
+    **Por página, e não a lista inteira:** o cadastro do sistema antigo trouxe
+    1.686 clientes. Devolver todos era quase 1 MB por abertura da tela e 1.686
+    linhas no navegador — no celular do balcão, quase dez segundos de tela
+    travada. Quem procura alguém usa a busca; quem só abriu a aba não precisa
+    da loja inteira de uma vez.
+    """
+    condicoes = [
+        c for c in (_filtro_de_busca(busca), _filtro_de_relacao(filtro)) if c is not None
+    ]
+
+    total_consulta = select(func.count()).select_from(Cliente)
+    for c in condicoes:
+        total_consulta = total_consulta.where(c)
+    total = int((await sessao.execute(total_consulta)).scalar() or 0)
+
     consulta = select(Cliente).order_by(Cliente.nome)
-    if busca:
-        digitos = _so_digitos(busca)
-        if digitos and len(digitos) >= 3:
-            consulta = consulta.where(
-                or_(Cliente.cpf.contains(digitos), Cliente.nome.ilike(f"%{busca}%"))
-            )
-        else:
-            consulta = consulta.where(Cliente.nome.ilike(f"%{busca}%"))
+    for c in condicoes:
+        consulta = consulta.where(c)
+    consulta = consulta.limit(por_pagina).offset((pagina - 1) * por_pagina)
 
     clientes = list((await sessao.execute(consulta)).scalars())
     if not clientes:
-        return []
+        return [], total
 
     ids = [c.id for c in clientes]
     saldos = await _saldo_por_cliente(sessao, ids)
@@ -156,7 +200,7 @@ async def listar(sessao: AsyncSession, *, busca: str | None = None) -> list[Resu
             qtd_vendeu=vendeu.get(c.id, 0),
         )
         for c in clientes
-    ]
+    ], total
 
 
 async def saldo_devedor(sessao: AsyncSession, cliente_id: int) -> int:

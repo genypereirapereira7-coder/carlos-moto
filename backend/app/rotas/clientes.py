@@ -11,6 +11,7 @@ from app.schemas.cliente import (
     ClienteResumo,
     ClienteSaida,
     CompraDoCliente,
+    PaginaDeClientes,
     MotoNoHistorico,
     VendaDoCliente,
 )
@@ -20,21 +21,48 @@ from app.servicos.eventos import Evento, publicar_apos_commit
 rotas = APIRouter(prefix="/clientes", tags=["clientes"])
 
 
-@rotas.get("", response_model=list[ClienteResumo])
-async def listar(sessao: SessaoDep, _: SoVendedor, busca: str | None = None):
+@rotas.get("", response_model=PaginaDeClientes)
+async def listar(
+    sessao: SessaoDep,
+    _: SoVendedor,
+    busca: str | None = None,
+    filtro: str | None = None,
+    pagina: int = 1,
+    por_pagina: int = 50,
+):
     """Busca por nome ou CPF. A mesma rota serve a lista da tela CLIENTES e o
-    passo "escolher cliente" na hora de registrar uma venda."""
-    return [
-        ClienteResumo(
-            **ClienteSaida.model_validate(resumo.cliente).model_dump(),
-            deve_parcela=resumo.deve_parcela,
-            saldo_devedor_centavos=resumo.saldo_devedor_centavos,
-            saldo_atrasado_centavos=resumo.saldo_atrasado_centavos,
-            qtd_comprou=resumo.qtd_comprou,
-            qtd_vendeu=resumo.qtd_vendeu,
-        )
-        for resumo in await servico.listar(sessao, busca=busca)
-    ]
+    passo "escolher cliente" na hora de registrar uma venda.
+
+    `filtro` aceita "comprou" e "vendeu" — do ponto de vista do cliente, que é
+    como o dono fala: "comprou" é moto que saiu da loja pra ele, "vendeu" é
+    moto que ele trouxe e a loja pagou.
+
+    Vem por página: com o cadastro do sistema antigo importado são 1.686
+    clientes, e mandar todos de uma vez travava a tela no celular do balcão.
+    """
+    por_pagina = max(1, min(por_pagina, 200))
+    pagina = max(1, pagina)
+    if filtro not in (None, "", "todos", "comprou", "vendeu"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Filtro desconhecido")
+    resumos, total = await servico.listar(
+        sessao, busca=busca, filtro=filtro, pagina=pagina, por_pagina=por_pagina
+    )
+    return PaginaDeClientes(
+        clientes=[
+            ClienteResumo(
+                **ClienteSaida.model_validate(resumo.cliente).model_dump(),
+                deve_parcela=resumo.deve_parcela,
+                saldo_devedor_centavos=resumo.saldo_devedor_centavos,
+                saldo_atrasado_centavos=resumo.saldo_atrasado_centavos,
+                qtd_comprou=resumo.qtd_comprou,
+                qtd_vendeu=resumo.qtd_vendeu,
+            )
+            for resumo in resumos
+        ],
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+    )
 
 
 @rotas.post("", response_model=ClienteSaida, status_code=status.HTTP_201_CREATED)

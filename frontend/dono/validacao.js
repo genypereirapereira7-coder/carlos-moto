@@ -76,6 +76,44 @@ export function emailValido(valor) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(texto);
 }
 
+/** CEP: em branco passa (é opcional); preenchido tem que ter 8 dígitos. */
+export function cepValido(valor) {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return true;
+  return texto.replace(/\D/g, "").length === 8;
+}
+
+// Lista fechada, igual à do servidor: "RR" e "RO" são um caractere de
+// diferença, e a loja é de Rondônia.
+const UFS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO",
+];
+
+export const UFS_DO_BRASIL = UFS;
+
+/** UF: em branco passa (é opcional); preenchida tem que existir. */
+export function ufValida(valor) {
+  const texto = String(valor ?? "").trim().toUpperCase();
+  if (!texto) return true;
+  return UFS.includes(texto);
+}
+
+/**
+ * Nascimento: em branco passa (é opcional). No futuro é dedo escorregado; antes
+ * de 1900 é a "data em branco" do sistema antigo (`0001-01-01`) — 611 cadastros
+ * da loja vinham assim, e sem esta regra a tela encheria de gente do ano 1.
+ */
+export function nascimentoValido(valor) {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return true;
+  const d = new Date(`${texto}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  const hoje = new Date();
+  return d <= hoje && d.getFullYear() >= 1900;
+}
+
 export function textoPreenchido(valor) {
   return String(valor ?? "").trim().length > 0;
 }

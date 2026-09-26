@@ -31,11 +31,16 @@ from sqlalchemy import Delete, event, insert, inspect
 from sqlalchemy.orm import Session
 
 from app.models.historico import AcaoHistorico, Historico
+from app.models.dado_antigo import LinhaAntiga
 from app.models.usuario import SessaoAuth
 
-# Não entram no histórico. `Historico` por razão óbvia (seria infinito) e
-# `SessaoAuth` pelo motivo explicado no topo.
-_FORA = (Historico, SessaoAuth)
+# Não entram no histórico. `Historico` por razão óbvia (seria infinito),
+# `SessaoAuth` pelo motivo explicado no topo, e `LinhaAntiga` porque ela já é
+# um arquivo morto: ninguém edita linha de backup do sistema antigo. Registrar
+# uma criação por linha punha 73.793 linhas de ruído no histórico da loja num
+# único import — e enterrava justamente o que o dono abre o histórico pra ver.
+# O `LoteAntigo` continua entrando: "quem importou o quê e quando" é evento.
+_FORA = (Historico, SessaoAuth, LinhaAntiga)
 
 # Nunca copiados pra outra tabela, nem pra dizer que mudaram. `chave_hash` é
 # a chave de acesso do dono: o banco guarda só o hash justamente pra ela não

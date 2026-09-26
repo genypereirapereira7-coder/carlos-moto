@@ -18,6 +18,7 @@ from app.erros import tratar_erro_de_validacao
 from app.rotas import (
     auth,
     clientes,
+    dados,
     financeiro,
     historico,
     motos,
@@ -133,6 +134,7 @@ app.include_router(motos.rotas)
 app.include_router(usuarios.rotas)
 app.include_router(vendas.rotas)
 app.include_router(clientes.rotas)
+app.include_router(dados.rotas)
 app.include_router(parcelas.rotas)
 app.include_router(financeiro.rotas)
 app.include_router(historico.rotas)

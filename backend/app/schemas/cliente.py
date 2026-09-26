@@ -16,11 +16,16 @@ from app.models.venda import FormaPagamento
 from app.schemas.parcela import ParcelaSaida
 from app.schemas.tipos import Utc
 from app.schemas.validadores import (
+    validar_cep,
     validar_cpf,
     validar_cpf_opcional,
-    validar_telefone,
+    validar_email,
+    validar_nascimento,
     validar_observacao,
+    validar_rg,
+    validar_telefone,
     validar_texto_nao_vazio,
+    validar_uf,
 )
 
 _Nome = Annotated[
@@ -29,6 +34,39 @@ _Nome = Annotated[
 _Cpf = Annotated[str, AfterValidator(validar_cpf)]
 _Telefone = Annotated[str, Field(max_length=20), AfterValidator(validar_telefone)]
 _Observacao = Annotated[str, Field(max_length=1000), AfterValidator(validar_observacao)]
+_Email = Annotated[str, Field(max_length=120), AfterValidator(validar_email)]
+_Uf = Annotated[str, Field(max_length=2), AfterValidator(validar_uf)]
+_Cep = Annotated[str, Field(max_length=10), AfterValidator(validar_cep)]
+
+
+class _ComDocumentos(BaseModel):
+    """RG e nascimento — o que, junto do CPF, qualifica a pessoa no contrato.
+
+    Os dois são opcionais: o balcão cadastra com o que tem na mão. O sistema
+    antigo da loja guardava ambos, e é por isso que eles existem aqui.
+    """
+
+    rg: Annotated[str, Field(max_length=20), AfterValidator(validar_rg)] | None = None
+    nascimento: Annotated[date, AfterValidator(validar_nascimento)] | None = None
+
+
+class _ComEndereco(BaseModel):
+    """E-mail e endereço, iguais no cadastro e na edição.
+
+    Tudo opcional: o dono cadastra na pressa do balcão e completa depois. O
+    que não é opcional é estar *certo* quando vem preenchido — UF que não
+    existe e CEP de 7 dígitos entram calados e só aparecem no dia em que o
+    contrato sai errado.
+    """
+
+    email: _Email | None = None
+    endereco: Annotated[str, Field(max_length=160)] | None = None
+    numero: Annotated[str, Field(max_length=20)] | None = None
+    complemento: Annotated[str, Field(max_length=80)] | None = None
+    bairro: Annotated[str, Field(max_length=80)] | None = None
+    cidade: Annotated[str, Field(max_length=80)] | None = None
+    uf: _Uf | None = None
+    cep: _Cep | None = None
 
 
 class _ComConjuge(BaseModel):
@@ -54,14 +92,37 @@ class _ComConjuge(BaseModel):
         return self
 
 
-class ClienteEntrada(_ComConjuge):
+class EnderecoDoCliente(BaseModel):
+    """O endereço do cliente do jeito que o contrato precisa dele.
+
+    Vai junto na venda (e não só na tela do cliente) porque contrato de compra
+    e venda sem endereço do comprador é fraco justo onde ele precisa valer.
+    Objeto separado, montado com `model_validate`, pra que campo novo de
+    endereço chegue ao documento sem alguém lembrar de mexer no `_saida()`.
+    """
+
+    rg: str | None = None
+    nascimento: date | None = None
+    email: str | None = None
+    endereco: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
+    cidade: str | None = None
+    uf: str | None = None
+    cep: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ClienteEntrada(_ComConjuge, _ComEndereco, _ComDocumentos):
     nome: _Nome
     cpf: _Cpf
     telefone: _Telefone | None = None
     observacao: _Observacao | None = None
 
 
-class ClientePatch(_ComConjuge):
+class ClientePatch(_ComConjuge, _ComEndereco, _ComDocumentos):
     nome: _Nome | None = None
     telefone: _Telefone | None = None
     observacao: _Observacao | None = None
@@ -76,6 +137,16 @@ class ClienteSaida(BaseModel):
     conjuge_nome: str | None = None
     conjuge_cpf: str | None = None
     conjuge_telefone: str | None = None
+    rg: str | None = None
+    nascimento: date | None = None
+    email: str | None = None
+    endereco: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
+    cidade: str | None = None
+    uf: str | None = None
+    cep: str | None = None
     observacao: str | None = None
     criado_em: Utc
 
@@ -96,6 +167,20 @@ class ClienteResumo(ClienteSaida):
 
     qtd_comprou: int
     qtd_vendeu: int
+
+
+class PaginaDeClientes(BaseModel):
+    """Uma página da lista, com o total que deu na busca.
+
+    O total vai junto porque sem ele a tela não sabe dizer "50 de 1.686" — e
+    uma lista cortada em silêncio faria o dono jurar que o cliente não está
+    cadastrado.
+    """
+
+    clientes: list[ClienteResumo]
+    total: int
+    pagina: int
+    por_pagina: int
 
 
 class MotoNoHistorico(BaseModel):

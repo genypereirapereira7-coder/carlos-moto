@@ -245,7 +245,7 @@ export async function enviar(metodo, caminho, corpo = null, { rotulo } = {}) {
  *
  * @param {(fracao: number) => void} [aoProgredir]  0 a 1, enquanto sobe.
  */
-export function enviarArquivo(caminho, arquivo, { campo = "arquivos", aoProgredir } = {}) {
+export function enviarArquivo(caminho, arquivo, { campo = "arquivos", aoProgredir, extras } = {}) {
   if (!sessao) return Promise.reject(new ErroApi(401, "Sem sessão"));
 
   return new Promise((resolver, rejeitar) => {
@@ -267,6 +267,12 @@ export function enviarArquivo(caminho, arquivo, { campo = "arquivos", aoProgredi
     pedido.addEventListener("abort", () => rejeitar(new ErroRede(new Error("envio cancelado"))));
 
     const corpo = new FormData();
+    // Campos de texto que acompanham os arquivos (o nome da importação, de
+    // onde veio). Vão antes dos arquivos porque o servidor lê o formulário em
+    // ordem e assim não precisa segurar megabytes na memória pra achá-los.
+    for (const [chave, valor] of Object.entries(extras || {})) {
+      if (valor !== undefined && valor !== null && valor !== "") corpo.append(chave, valor);
+    }
     // Um arquivo ou a pasta inteira: o servidor recebe os dois do mesmo jeito.
     for (const um of Array.isArray(arquivo) || arquivo instanceof FileList ? arquivo : [arquivo]) {
       corpo.append(campo, um, um.name);
@@ -289,10 +295,19 @@ const jaAquecidos = new Set();
  * vez por carregamento da página — o re-render do WebSocket acontece a toda
  * hora e viraria uma enxurrada de pedidos.
  */
+// Teto do pré-aquecimento. As chamadas são em fila, uma esperando a outra —
+// de propósito, pra não afogar a conexão da loja. Só que isso significa que a
+// fila leva o tempo de todas somadas: com os 1.686 clientes importados do
+// sistema antigo, abrir a aba CLIENTES disparava 1.686 chamadas em sequência e
+// travava a tela por 9 segundos no computador (no 4G do balcão, minutos).
+// Pré-aquecer serve pra quem ele provavelmente vai abrir agora, e isso é a
+// primeira tela de lista — não o cadastro inteiro da loja.
+const MAX_PRE_AQUECER = 60;
+
 export async function preAquecer(caminhos) {
   if (!sessao || !navigator.onLine) return;
 
-  for (const caminho of caminhos) {
+  for (const caminho of caminhos.slice(0, MAX_PRE_AQUECER)) {
     if (jaAquecidos.has(caminho)) continue;
     jaAquecidos.add(caminho);
     try {

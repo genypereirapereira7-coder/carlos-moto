@@ -13,6 +13,8 @@ import { abrirModal, fecharModal, avisar, guardadoNaFila } from "../ui.js";
 import { imprimirComprovanteVenda, imprimirContratoVenda } from "../comprovantes.js";
 import * as v from "../validacao.js";
 import { htmlCamposConjuge, ligarConjuge, lerConjuge, regrasConjuge, corpoConjuge } from "../conjuge.js";
+import { htmlCamposEndereco, lerEndereco, regrasEndereco, corpoEndereco } from "../endereco.js";
+import { htmlCamposDocumentos, lerDocumentos, regrasDocumentos, corpoDocumentos } from "../documentos.js";
 import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
 
 function escapar(valor) {
@@ -69,7 +71,9 @@ export function abrirModalVenda(moto, aoVender) {
           <label class="campo">CPF<input name="novo_cpf" placeholder="000.000.000-00" maxlength="14" /></label>
           <label class="campo">Telefone<input name="novo_telefone" placeholder="(11) 99999-0000" /></label>
         </div>
+        ${htmlCamposDocumentos(null, "novo_")}
         ${htmlCamposConjuge(null, "novo_")}
+        ${htmlCamposEndereco(null, "novo_")}
         <div class="acoes-modal">
           <button type="button" class="botao botao--fantasma" id="cancelar-cliente-novo">Cancelar</button>
           <button type="button" class="botao" id="salvar-cliente-novo">Cadastrar e usar</button>
@@ -203,10 +207,16 @@ export function abrirModalVenda(moto, aoVender) {
     // Espera a digitação parar: sem isso é uma chamada por tecla apertada.
     timerBusca = setTimeout(async () => {
       try {
-        const achados = await api.pedir("GET", `/clientes?busca=${encodeURIComponent(termo)}`);
+        // `por_pagina=8`: a lista de sugestão mostra 8, então não faz sentido
+        // trazer 50 do servidor pra jogar 42 fora.
+        const pagina = await api.pedir(
+          "GET",
+          `/clientes?busca=${encodeURIComponent(termo)}&por_pagina=8`,
+        );
+        const achados = pagina.clientes;
         listaResultado.hidden = false;
         listaResultado.innerHTML = achados.length
-          ? achados.slice(0, 8).map((c) => `
+          ? achados.map((c) => `
               <button type="button" class="resultado-item" data-id="${c.id}" data-nome="${escapar(c.nome)}" data-cpf="${c.cpf}">
                 ${escapar(c.nome)} <span class="fraco">· ${formatarCpf(c.cpf)}</span>
               </button>
@@ -242,13 +252,18 @@ export function abrirModalVenda(moto, aoVender) {
     const documento = form.elements.novo_cpf.value;
     const fone = form.elements.novo_telefone.value;
 
-    const conjuge = lerConjuge(new FormData(form), "novo_");
+    const dadosDoForm = new FormData(form);
+    const conjuge = lerConjuge(dadosDoForm, "novo_");
+    const endereco = lerEndereco(dadosDoForm, "novo_");
+    const documentos = lerDocumentos(dadosDoForm, "novo_");
     const valido = v.validarFormulario(form, [
       ["novo_nome", v.textoPreenchido(nome), "Informe o nome"],
       ["novo_cpf", v.textoPreenchido(documento), "CPF é obrigatório"],
       ["novo_cpf", !v.textoPreenchido(documento) || v.cpfValido(documento), "CPF inválido — confira os números"],
       ["novo_telefone", v.telefoneValido(fone), "Telefone precisa ter 10 ou 11 dígitos, com DDD"],
       ...regrasConjuge(conjuge, "novo_"),
+      ...regrasEndereco(endereco, "novo_"),
+      ...regrasDocumentos(documentos, "novo_"),
     ]);
     if (!valido) return;
 
@@ -258,6 +273,8 @@ export function abrirModalVenda(moto, aoVender) {
         cpf: documento,
         telefone: fone || null,
         ...corpoConjuge(conjuge),
+        ...corpoEndereco(endereco),
+        ...corpoDocumentos(documentos),
       });
       clienteEscolhido = novo;
       avisar("Cliente cadastrado");
@@ -277,7 +294,8 @@ export function abrirModalVenda(moto, aoVender) {
       }
       v.mostrarErroDeApi(form, erro, {
         renomear: { nome: "novo_nome", cpf: "novo_cpf", telefone: "novo_telefone" },
-        porPalavra: [["cpf", "novo_cpf"], ["telefone", "novo_telefone"]],
+        porPalavra: [["cpf", "novo_cpf"], ["telefone", "novo_telefone"],
+                     ["e-mail", "novo_email"], ["cep", "novo_cep"], ["uf", "novo_uf"]],
       });
     }
   });

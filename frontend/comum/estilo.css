@@ -26,6 +26,7 @@
   --papel: #ffffff;
   --fundo: #f5f1ea;
   --verde: #1c8c5a;
+  --verde-fundo: #e6f6ee;
   --amarelo: #b8730a;
   --amarelo-fundo: #fff4d9;
   --vermelho: #c62c46;
@@ -141,6 +142,17 @@ select {
   background: var(--vermelho);
 }
 
+/* Botão que vive dentro de um texto explicativo ("Mostrar todas"). Não usa
+   `.botao` porque aquele é flex e quebraria a linha da frase. Padding
+   vertical generoso: continua sendo um alvo de dedo, mesmo sendo texto. */
+.botao-link {
+  display: inline;
+  padding: 6px 2px;
+  color: var(--laranja);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 .cartao {
   background: var(--papel);
   border-radius: var(--raio);
@@ -170,6 +182,11 @@ select {
 .faixa--erro {
   background: var(--vermelho-fundo);
   color: var(--vermelho);
+}
+
+.faixa--ok {
+  background: var(--verde-fundo);
+  color: var(--verde);
 }
 
 .aviso {

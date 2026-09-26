@@ -6,6 +6,7 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 from app.models.venda import COM_CARNE, FormaPagamento
 from app.schemas.avalista import AvalistaEntrada, AvalistaSaida
+from app.schemas.cliente import EnderecoDoCliente
 from app.schemas.moto import MotoSaida
 from app.schemas.parcela import ParcelaSaida
 from app.schemas.tipos import Utc
@@ -85,6 +86,7 @@ class VendaSaida(BaseModel):
     cliente_nome: str
     cliente_cpf: str
     cliente_telefone: str | None
+    cliente_endereco: EnderecoDoCliente | None = None
     forma_pagamento: FormaPagamento
     preco_venda_centavos: int
     valor_entrada_centavos: int = 0

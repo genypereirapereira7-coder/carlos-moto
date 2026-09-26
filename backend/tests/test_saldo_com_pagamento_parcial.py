@@ -34,7 +34,7 @@ async def test_saldo_do_cliente_desconta_pagamento_parcial(cliente, dados, entra
         f"/parcelas/{venda['parcelas'][0]['id']}/pagamentos",
         json={"valor_centavos": 400_000}, headers=dono,
     )
-    devedor = next(c for c in (await cliente.get("/clientes", headers=dono)).json()
+    devedor = next(c for c in (await cliente.get("/clientes", headers=dono)).json()["clientes"]
                    if c["id"] == dados["maria"].id)
     assert devedor["saldo_devedor_centavos"] == 600_000
     assert devedor["saldo_atrasado_centavos"] == 600_000

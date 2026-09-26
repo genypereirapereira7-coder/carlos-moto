@@ -16,6 +16,20 @@ import {
 import * as v from "../validacao.js";
 import { htmlCamposConjuge, ligarConjuge, lerConjuge, regrasConjuge, corpoConjuge } from "../conjuge.js";
 import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
+import {
+  corpoDocumentos,
+  dataNascimentoBr,
+  htmlCamposDocumentos,
+  lerDocumentos,
+  regrasDocumentos,
+} from "../documentos.js";
+import {
+  corpoEndereco,
+  enderecoEmUmaLinha,
+  htmlCamposEndereco,
+  lerEndereco,
+  regrasEndereco,
+} from "../endereco.js";
 
 function escapar(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, (c) => (
@@ -37,6 +51,10 @@ let pedidoDetalhe = 0;
 let abaHistorico = "comprou";
 let filtroLista = "todos";
 let buscaAtual = "";
+// Quantas páginas já foram carregadas. Sobrevive ao re-render do WebSocket:
+// sem isto, o dono que tocou "Mostrar mais" três vezes voltava pra primeira
+// página sozinho no meio da consulta.
+let paginasCarregadas = 1;
 
 export async function renderClientes(raiz) {
   raiz.innerHTML = `
@@ -63,6 +81,7 @@ export async function renderClientes(raiz) {
           <tbody id="linhas-clientes"><tr><td colspan="6" class="fraco">Carregando…</td></tr></tbody>
         </table>
       </div>
+      <div class="acoes-linha secao-seguinte" id="rodape-clientes"></div>
     </div>
   `;
 
@@ -80,11 +99,9 @@ export async function renderClientes(raiz) {
     });
   }
 
-  function filtrados() {
-    if (filtroLista === "comprou") return carregados.filter((c) => c.qtd_comprou > 0);
-    if (filtroLista === "vendeu") return carregados.filter((c) => c.qtd_vendeu > 0);
-    return carregados;
-  }
+  // O filtro "Comprou"/"Vendeu" é aplicado no servidor (ver `servicos/clientes.py`):
+  // filtrar aqui só olharia a página carregada e diria "3 clientes que
+  // compraram" quando existem trezentos.
 
   function selo(cliente) {
     if (cliente.saldo_atrasado_centavos > 0) {
@@ -98,13 +115,16 @@ export async function renderClientes(raiz) {
   }
 
   function desenharTabela() {
-    const lista = filtrados();
+    // Pode ser chamada depois de o dono trocar de aba: o `app.js` refaz o
+    // `#conteudo`, e aí este `<tbody>` não existe mais.
+    const onde = corpoTabela();
+    if (!onde) return;
+    const lista = carregados;
     if (!lista.length) {
-      corpoTabela().innerHTML =
-        '<tr><td colspan="6" class="fraco">Nenhum cliente encontrado.</td></tr>';
+      onde.innerHTML = '<tr><td colspan="6" class="fraco">Nenhum cliente encontrado.</td></tr>';
       return;
     }
-    corpoTabela().innerHTML = lista.map((c) => `
+    onde.innerHTML = lista.map((c) => `
       <tr data-id="${c.id}">
         <td>${escapar(c.nome)}</td>
         <td data-rotulo="CPF">${formatarCpf(c.cpf)}</td>
@@ -116,19 +136,62 @@ export async function renderClientes(raiz) {
     `).join("");
   }
 
+  const POR_PAGINA = 50;
+  let total = 0;
+
+  /**
+   * Carrega da primeira página até a `paginasCarregadas` — não a loja inteira.
+   *
+   * São 1.686 clientes depois da importação do sistema antigo. Mandar todos
+   * numa resposta era quase 1 MB e 1.686 linhas no navegador: no celular do
+   * balcão, dez segundos de tela parada antes de aparecer o primeiro nome.
+   */
   async function carregarLista() {
     try {
-      const caminho = buscaAtual
-        ? `/clientes?busca=${encodeURIComponent(buscaAtual)}`
-        : "/clientes";
-      carregados = await api.pedir("GET", caminho);
+      const pedidos = [];
+      for (let pagina = 1; pagina <= paginasCarregadas; pagina += 1) {
+        const parametros = new URLSearchParams({ pagina, por_pagina: POR_PAGINA });
+        if (buscaAtual) parametros.set("busca", buscaAtual);
+        if (filtroLista !== "todos") parametros.set("filtro", filtroLista);
+        pedidos.push(api.pedir("GET", `/clientes?${parametros}`));
+      }
+      const respostas = await Promise.all(pedidos);
+      total = respostas[respostas.length - 1].total;
+      carregados = respostas.flatMap((r) => r.clientes);
       desenharTabela();
+      desenharRodape();
       // Mesma ideia de `telas/motos.js`: sem o cadastro de cada um guardado,
-      // a lista abre offline mas nenhum cliente abre.
+      // a lista abre offline mas nenhum cliente abre. O `preAquecer` tem teto
+      // próprio — ver `comum/api.js`.
       api.preAquecer(carregados.map((c) => `/clientes/${c.id}`));
     } catch (erro) {
-      corpoTabela().innerHTML = `<tr><td colspan="6" class="faixa faixa--erro">${escapar(mensagemDeErro(erro))}</td></tr>`;
+      const alvo = corpoTabela();
+      if (alvo) {
+        alvo.innerHTML = `<tr><td colspan="6" class="faixa faixa--erro">${escapar(mensagemDeErro(erro))}</td></tr>`;
+      }
     }
+  }
+
+  function desenharRodape() {
+    const onde = raiz.querySelector("#rodape-clientes");
+    if (!onde) return;
+    if (total <= carregados.length) {
+      // Sem botão quando já está tudo na tela; a contagem fica, porque saber
+      // "são 1.686" é informação, não enfeite.
+      onde.innerHTML = total
+        ? `<span class="fraco">${total.toLocaleString("pt-BR")} cliente(s)</span>`
+        : "";
+      return;
+    }
+    onde.innerHTML = `
+      <button class="botao botao--fantasma" id="mostrar-mais-clientes" type="button">Mostrar mais</button>
+      <span class="fraco">${carregados.length.toLocaleString("pt-BR")} de
+        ${total.toLocaleString("pt-BR")} — use a busca pra achar alguém direto</span>`;
+    onde.querySelector("#mostrar-mais-clientes").addEventListener("click", async (evento) => {
+      evento.target.disabled = true;
+      paginasCarregadas += 1;
+      await carregarLista();
+    });
   }
 
   // ------------------------------------------------------------- detalhe
@@ -178,6 +241,10 @@ export async function renderClientes(raiz) {
           ${c.casado == null ? "" : `<div><dt>Estado civil</dt><dd>${c.casado ? "Casado(a)" : "Solteiro(a)"}</dd></div>`}
           ${c.casado && c.conjuge_nome ? `<div><dt>Cônjuge</dt><dd>${escapar(c.conjuge_nome)}</dd></div>` : ""}
           ${c.casado && c.conjuge_telefone ? `<div><dt>Telefone do cônjuge</dt><dd>${escapar(formatarTelefone(c.conjuge_telefone))}</dd></div>` : ""}
+          ${c.rg ? `<div><dt>RG</dt><dd>${escapar(c.rg)}</dd></div>` : ""}
+          ${c.nascimento ? `<div><dt>Nascimento</dt><dd>${escapar(dataNascimentoBr(c.nascimento))}</dd></div>` : ""}
+          ${c.email ? `<div><dt>E-mail</dt><dd>${escapar(c.email)}</dd></div>` : ""}
+          ${enderecoEmUmaLinha(c) ? `<div><dt>Endereço</dt><dd>${escapar(enderecoEmUmaLinha(c))}</dd></div>` : ""}
         </dl>
         ${c.observacao ? `
           <h3 class="secao-seguinte">Observação</h3>
@@ -281,7 +348,9 @@ export async function renderClientes(raiz) {
         <label class="campo">Nome<input name="nome" value="${escapar(cliente?.nome || "")}" required /></label>
         <label class="campo">Telefone<input name="telefone" value="${escapar(cliente?.telefone || "")}" placeholder="(11) 99999-0000" /></label>
       </div>
+      ${htmlCamposDocumentos(cliente)}
       ${htmlCamposConjuge(cliente)}
+      ${htmlCamposEndereco(cliente)}
       ${htmlCampoObservacao(cliente?.observacao, "Ex.: prefere WhatsApp; cliente antigo da loja.")}
     `;
   }
@@ -309,6 +378,8 @@ export async function renderClientes(raiz) {
       const documento = dados.get("cpf");
       const fone = dados.get("telefone");
       const conjuge = lerConjuge(dados);
+      const endereco = lerEndereco(dados);
+      const documentos = lerDocumentos(dados);
       const observacao = lerObservacao(dados);
 
       const valido = v.validarFormulario(form, [
@@ -317,6 +388,8 @@ export async function renderClientes(raiz) {
         ["cpf", !v.textoPreenchido(documento) || v.cpfValido(documento), "CPF inválido — confira os números"],
         ["telefone", v.telefoneValido(fone), "Telefone precisa ter 10 ou 11 dígitos, com DDD"],
         ...regrasConjuge(conjuge),
+        ...regrasEndereco(endereco),
+        ...regrasDocumentos(documentos),
         ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
@@ -327,6 +400,8 @@ export async function renderClientes(raiz) {
           cpf: documento,
           telefone: fone || null,
           ...corpoConjuge(conjuge),
+          ...corpoEndereco(endereco),
+          ...corpoDocumentos(documentos),
           observacao,
         }, { rotulo: `Cliente ${nome}` });
         fecharModal(modal);
@@ -338,7 +413,10 @@ export async function renderClientes(raiz) {
           fecharModal(modal);
           return;
         }
-        v.mostrarErroDeApi(form, erro, { porPalavra: [["cpf", "cpf"], ["telefone", "telefone"]] });
+        v.mostrarErroDeApi(form, erro, {
+          porPalavra: [["cpf", "cpf"], ["telefone", "telefone"], ["e-mail", "email"],
+                       ["cep", "cep"], ["uf", "uf"]],
+        });
       }
     });
   }
@@ -366,19 +444,25 @@ export async function renderClientes(raiz) {
       const fone = dados.get("telefone");
 
       const conjuge = lerConjuge(dados);
+      const endereco = lerEndereco(dados);
+      const documentos = lerDocumentos(dados);
       const observacao = lerObservacao(dados);
 
       const valido = v.validarFormulario(form, [
         ["nome", v.textoPreenchido(nome), "Informe o nome"],
         ["telefone", v.telefoneValido(fone), "Telefone precisa ter 10 ou 11 dígitos, com DDD"],
         ...regrasConjuge(conjuge),
+        ...regrasEndereco(endereco),
+        ...regrasDocumentos(documentos),
         ...regrasObservacao(observacao),
       ]);
       if (!valido) return;
 
       try {
         await api.enviar("PATCH", `/clientes/${cliente.id}`, {
-          nome, telefone: fone || null, ...corpoConjuge(conjuge), observacao,
+          nome, telefone: fone || null,
+          ...corpoConjuge(conjuge), ...corpoEndereco(endereco),
+          ...corpoDocumentos(documentos), observacao,
         }, { rotulo: `Edição do cliente ${nome}` });
         fecharModal(modal);
         avisar("Cliente atualizado");
@@ -389,7 +473,9 @@ export async function renderClientes(raiz) {
           fecharModal(modal);
           return;
         }
-        v.mostrarErroDeApi(form, erro, { porPalavra: [["telefone", "telefone"]] });
+        v.mostrarErroDeApi(form, erro, {
+          porPalavra: [["telefone", "telefone"], ["e-mail", "email"], ["cep", "cep"], ["uf", "uf"]],
+        });
       }
     });
   }
@@ -405,6 +491,7 @@ export async function renderClientes(raiz) {
     clearTimeout(timerBuscaCliente);
     timerBuscaCliente = setTimeout(async () => {
       buscaAtual = termo;
+      paginasCarregadas = 1;  // busca nova começa do começo
       await carregarLista();
     }, 300);
   });
@@ -412,8 +499,10 @@ export async function renderClientes(raiz) {
     const botao = evento.target.closest(".aba-filtro");
     if (!botao) return;
     filtroLista = botao.dataset.filtro;
+    paginasCarregadas = 1;
     pintarFiltro();
-    desenharTabela();
+    // Recarrega em vez de redesenhar: quem filtra agora é o servidor.
+    carregarLista();
   });
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");

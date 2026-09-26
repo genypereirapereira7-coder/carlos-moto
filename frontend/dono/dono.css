@@ -188,6 +188,59 @@ body {
   max-width: 1100px;
 }
 
+/* A chave de acesso da NF-e: 44 dígitos que só servem pra conferir dígito por
+   dígito com outro documento. Monoespaçada e podendo quebrar, porque em tela de
+   celular ela não cabe numa linha. */
+.chave-nota {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* Campo de busca com a lupa dentro. A lupa é `pointer-events: none` pra não
+   roubar o toque de quem mira nela querendo digitar. */
+.campo-busca {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+}
+
+.campo-busca input {
+  padding-left: 42px;
+}
+
+.campo-busca .lupa {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--tinta-fraca);
+  pointer-events: none;
+}
+
+/* Bloco de ação dentro de um cartão: separa "isto muda o sistema" do resto da
+   tela, que é só consulta. Usado pelo "Trazer clientes" na aba Dados. */
+.caixa-destaque {
+  padding: 16px;
+  border: 1px solid var(--linha);
+  border-left: 3px solid var(--laranja);
+  border-radius: var(--raio);
+  background: var(--laranja-fundo);
+}
+
+.caixa-destaque p {
+  margin: 0 0 10px;
+}
+
+/* A aba Dados usa o monitor inteiro: a tabela do sistema antigo tem dezenas de
+   colunas, e cortar em 1100px obrigava a rolar de lado pra ler uma linha. */
+.conteudo[data-largo="1"] {
+  max-width: none;
+}
+
 .conteudo h2 {
   margin: 0 0 18px;
 }

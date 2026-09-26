@@ -176,3 +176,60 @@ def validar_texto_nao_vazio(valor: str | None) -> str | None:
         raise ValueError("Não pode ficar em branco")
     return limpo
 
+
+
+# As 26 UFs e o DF. Lista fechada de propósito: "RR" e "RO" são um caractere
+# de diferença, e o cliente da loja é de Rondônia.
+_UFS = frozenset({
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+    "SP", "SE", "TO",
+})
+
+
+def validar_uf(valor: str | None) -> str | None:
+    """Em branco passa. Preenchido, tem que ser UF que existe."""
+    if valor is None:
+        return None
+    texto = valor.strip().upper()
+    if not texto:
+        return None
+    if texto not in _UFS:
+        raise ValueError("UF inválida — use a sigla do estado, como RO")
+    return texto
+
+
+def validar_cep(valor: str | None) -> str | None:
+    """Guarda só os dígitos, como o CPF: a tela formata na hora de mostrar.
+    Em branco passa — nem todo cliente sabe o CEP na hora do cadastro."""
+    if valor is None:
+        return None
+    digitos = re.sub(r"\D", "", valor)
+    if not digitos:
+        return None
+    if len(digitos) != 8:
+        raise ValueError("CEP tem 8 dígitos")
+    return digitos
+
+
+def validar_rg(valor: str | None) -> str | None:
+    """RG não tem formato único no Brasil — o tamanho e a pontuação variam por
+    estado. Então só limpa as bordas; inventar regra aqui recusaria RG legítimo.
+    """
+    if valor is None:
+        return None
+    return valor.strip() or None
+
+
+def validar_nascimento(valor: date | None) -> date | None:
+    """Nascimento no futuro é erro de digitação. Antes de 1900 também: é como o
+    sistema antigo gravava "data em branco" (`0001-01-01`), e 611 cadastros da
+    loja vieram assim — deixar entrar encheria a tela de gente nascida no ano 1.
+    """
+    if valor is None:
+        return None
+    if valor > hoje():
+        raise ValueError("Nascimento não pode ser no futuro")
+    if valor.year < 1900:
+        raise ValueError("Confira o ano de nascimento")
+    return valor

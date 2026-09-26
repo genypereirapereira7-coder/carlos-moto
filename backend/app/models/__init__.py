@@ -5,6 +5,7 @@ a classe correspondente no registro do SQLAlchemy."""
 from app.models.avalista import Avalista
 from app.models.base import Base, agora, como_utc
 from app.models.cliente import Cliente
+from app.models.dado_antigo import LinhaAntiga, LoteAntigo
 from app.models.despesa import DespesaMoto
 from app.models.historico import AcaoHistorico, Historico
 from app.models.moto import CondicaoMoto, Moto, StatusMoto
@@ -19,6 +20,8 @@ __all__ = [
     "Cliente",
     "CondicaoMoto",
     "DespesaMoto",
+    "LinhaAntiga",
+    "LoteAntigo",
     "AcaoHistorico",
     "Historico",
     "FormaPagamento",

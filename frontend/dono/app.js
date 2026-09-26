@@ -11,6 +11,7 @@ import { renderMotos } from "./telas/motos.js";
 import { renderClientes } from "./telas/clientes.js";
 import { renderParcelas } from "./telas/parcelas.js";
 import { renderFinanceiro } from "./telas/financeiro.js";
+import { renderDados } from "./telas/dados.js";
 
 const telaLogin = document.getElementById("tela-login");
 const app = document.getElementById("app");
@@ -23,6 +24,7 @@ const TELAS = {
   clientes: renderClientes,
   parcelas: renderParcelas,
   financeiro: renderFinanceiro,
+  dados: renderDados,
 };
 
 let abaAtual = null;
@@ -62,6 +64,10 @@ function abrirAba(nome) {
     botao.dataset.ativa = botao.dataset.tab === nome ? "1" : "0";
   });
   location.hash = nome;
+  // A aba Dados mostra tabela do sistema antigo com dezenas de colunas: ali a
+  // largura de leitura de 1100px atrapalha em vez de ajudar, então essa tela
+  // usa o monitor inteiro. `dataset` e não classe, pra ficar na marca da aba.
+  conteudo.dataset.largo = nome === "dados" ? "1" : "0";
   // Trocou de aba: começa do topo, e não no meio da rolagem da anterior. No
   // celular quem rola é o documento; no computador, o `body`.
   window.scrollTo(0, 0);

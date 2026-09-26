@@ -117,7 +117,7 @@ async def test_cliente_separa_atrasado_do_total_a_receber(cliente, dados, entrar
     cabecalho = await entrar(dados["carlos"].id)
 
     lista = await cliente.get("/clientes", headers=cabecalho)
-    maria = next(c for c in lista.json() if c["id"] == dados["maria"].id)
+    maria = next(c for c in lista.json()["clientes"] if c["id"] == dados["maria"].id)
     assert maria["saldo_devedor_centavos"] == 900_000
     assert maria["saldo_atrasado_centavos"] == 600_000
 

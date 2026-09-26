@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.dependencias import SessaoDep, SoDono, SoVendedor
 from app.models.venda import Venda
+from app.schemas.cliente import EnderecoDoCliente
 from app.schemas.venda import VendaEntrada, VendaSaida
 from app.servicos import vendas as servico
 from app.servicos.eventos import Evento, hub
@@ -23,6 +24,7 @@ def _saida(venda: Venda) -> VendaSaida:
         cliente_nome=venda.cliente.nome,
         cliente_cpf=venda.cliente.cpf,
         cliente_telefone=venda.cliente.telefone,
+        cliente_endereco=EnderecoDoCliente.model_validate(venda.cliente),
         forma_pagamento=venda.forma_pagamento,
         preco_venda_centavos=venda.preco_venda_centavos,
         valor_entrada_centavos=venda.valor_entrada_centavos,

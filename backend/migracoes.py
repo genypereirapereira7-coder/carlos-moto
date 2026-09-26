@@ -69,6 +69,30 @@ async def aplicar(engine: AsyncEngine) -> list[str]:
                 await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
                 feitas.append(f"cliente.{coluna} (estado civil e cônjuge)")
 
+        # RG e nascimento: o contrato qualifica o comprador com eles.
+        for coluna, tipo in (("rg", "VARCHAR(20)"), ("nascimento", "DATE")):
+            if coluna not in colunas_cliente:
+                await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
+                feitas.append(f"cliente.{coluna} (RG e nascimento)")
+
+        # E-mail e endereço do cliente. Nulos nas linhas antigas: cliente
+        # cadastrado antes destes campos existirem não tem como ganhar
+        # endereço retroativamente — quem completa é o dono, ou a importação
+        # do sistema antigo, que traz os dois.
+        for coluna, tipo in (
+            ("email", "VARCHAR(120)"),
+            ("endereco", "VARCHAR(160)"),
+            ("numero", "VARCHAR(20)"),
+            ("complemento", "VARCHAR(80)"),
+            ("bairro", "VARCHAR(80)"),
+            ("cidade", "VARCHAR(80)"),
+            ("uf", "VARCHAR(2)"),
+            ("cep", "VARCHAR(8)"),
+        ):
+            if coluna not in colunas_cliente:
+                await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
+                feitas.append(f"cliente.{coluna} (e-mail e endereço)")
+
         # Entrada e juros da venda. `DEFAULT 0` porque a coluna é NOT NULL e as
         # vendas que já existem não tinham juros nenhum — zero é a verdade delas.
         colunas_venda = await _colunas(conexao, "venda")

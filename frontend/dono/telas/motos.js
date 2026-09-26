@@ -122,11 +122,17 @@ export async function renderMotos(raiz) {
   async function carregarLista() {
     try {
       const motos = await api.pedir("GET", "/motos");
+      // A resposta pode chegar depois de o dono já ter trocado de aba: o
+      // `app.js` refaz o `#conteudo` inteiro, e aí este `<tbody>` não existe
+      // mais. Escrever nele era um erro de JavaScript no celular, onde a
+      // lista demora o bastante pra dar tempo de trocar de aba.
+      const onde = corpoTabela();
+      if (!onde) return;
       if (!motos.length) {
-        corpoTabela().innerHTML = '<tr><td colspan="5" class="fraco">Nenhuma moto cadastrada ainda.</td></tr>';
+        onde.innerHTML = '<tr><td colspan="5" class="fraco">Nenhuma moto cadastrada ainda.</td></tr>';
         return;
       }
-      corpoTabela().innerHTML = motos.map((m) => `
+      onde.innerHTML = motos.map((m) => `
         <tr data-id="${m.id}">
           <td>${escapar(m.placa || "—")}</td>
           <td data-rotulo="Marca / Modelo">${escapar(m.marca)} ${escapar(m.modelo)}</td>
@@ -141,7 +147,10 @@ export async function renderMotos(raiz) {
       // não abre nada — e procurar uma placa é justamente o que esta tela faz.
       api.preAquecer(motos.map((m) => `/motos/${m.id}`));
     } catch (erro) {
-      corpoTabela().innerHTML = `<tr><td colspan="5" class="faixa faixa--erro">${escapar(mensagemDeErro(erro))}</td></tr>`;
+      const alvo = corpoTabela();
+      if (alvo) {
+        alvo.innerHTML = `<tr><td colspan="5" class="faixa faixa--erro">${escapar(mensagemDeErro(erro))}</td></tr>`;
+      }
     }
   }
 

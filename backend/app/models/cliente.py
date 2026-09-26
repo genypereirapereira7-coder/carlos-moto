@@ -1,8 +1,8 @@
 """Cliente: qualquer pessoa que compra moto da loja ou vende moto pra ela."""
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String
+from sqlalchemy import Boolean, Date, DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, agora
@@ -33,6 +33,27 @@ class Cliente(Base):
     conjuge_nome: Mapped[str | None] = mapped_column(String(120))
     conjuge_cpf: Mapped[str | None] = mapped_column(String(11))
     conjuge_telefone: Mapped[str | None] = mapped_column(String(20))
+
+    # RG e nascimento: é com eles, junto do CPF, que o contrato qualifica o
+    # comprador. O sistema antigo da loja guardava os dois, e o RG não tem
+    # formato único no Brasil (tamanho varia por estado), daí texto.
+    rg: Mapped[str | None] = mapped_column(String(20))
+    nascimento: Mapped[date | None] = mapped_column(Date)
+
+    # E-mail e endereço. O sistema antigo da loja já guardava os dois em todo
+    # cliente, e é o que faz carnê e contrato saírem com endereço em vez de em
+    # branco. Tudo opcional: o dono cadastra na pressa do balcão e completa
+    # depois, e cliente antigo nem sempre tem e-mail.
+    email: Mapped[str | None] = mapped_column(String(120))
+    endereco: Mapped[str | None] = mapped_column(String(160))
+    # Texto, não número: existe "123 A", "S/N" e "km 4".
+    numero: Mapped[str | None] = mapped_column(String(20))
+    complemento: Mapped[str | None] = mapped_column(String(80))
+    bairro: Mapped[str | None] = mapped_column(String(80))
+    cidade: Mapped[str | None] = mapped_column(String(80))
+    uf: Mapped[str | None] = mapped_column(String(2))
+    # Só dígitos, como o CPF: formatar é problema da tela.
+    cep: Mapped[str | None] = mapped_column(String(8))
 
     # Anotação livre sobre o cliente — o que o dono quer lembrar dele.
     observacao: Mapped[str | None] = mapped_column(String(1000))

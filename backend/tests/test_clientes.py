@@ -12,7 +12,7 @@ async def test_cadastrar_e_buscar_por_cpf(cliente, dados, entrar):
     assert resposta.json()["cpf"] == "11144477735"
 
     busca = await cliente.get("/clientes", params={"busca": "11144477735"}, headers=cabecalho)
-    nomes = {c["nome"] for c in busca.json()}
+    nomes = {c["nome"] for c in busca.json()["clientes"]}
     assert "José Pereira" in nomes
 
 
@@ -20,7 +20,7 @@ async def test_buscar_por_nome_parcial(cliente, dados, entrar):
     cabecalho = await entrar(dados["carlos"].id)
     resposta = await cliente.get("/clientes", params={"busca": "mari"}, headers=cabecalho)
     assert resposta.status_code == 200
-    assert any(c["nome"] == "Maria Souza" for c in resposta.json())
+    assert any(c["nome"] == "Maria Souza" for c in resposta.json()["clientes"])
 
 
 async def test_cpf_duplicado_da_409(cliente, dados, entrar):

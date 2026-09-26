@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v48";
+const VERSAO = "v58";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -27,6 +27,8 @@ const CASCA = [
   "./comprovantes.js",
   "./conjuge.js",
   "./observacao.js",
+  "./endereco.js",
+  "./documentos.js",
   "./dono.css",
   "./manifest.json",
   "./icones/icone-192.png",
@@ -38,6 +40,7 @@ const CASCA = [
   "./telas/vender.js",
   "./telas/parcelas.js",
   "./telas/financeiro.js",
+  "./telas/dados.js",
   "../comum/api.js",
   "../comum/fila.js",
   "../comum/cache.js",
@@ -53,7 +56,7 @@ const FORA_DO_CACHE = ["/dono/versao.js"];
 
 const CAMINHOS_API = [
   "/auth", "/motos", "/vendas", "/clientes", "/parcelas", "/financeiro",
-  "/usuarios", "/relatorios", "/health", "/ws",
+  "/usuarios", "/relatorios", "/health", "/ws", "/dados",
 ];
 
 self.addEventListener("install", (evento) => {

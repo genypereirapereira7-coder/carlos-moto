@@ -16,6 +16,8 @@
 
 import { reais, dataBr, cpf as fmtCpf, telefone as fmtTel, km as fmtKm } from "../comum/formato.js";
 import { abrirModal, fecharModal } from "./ui.js";
+import { enderecoEmUmaLinha } from "./endereco.js";
+import { dataNascimentoBr } from "./documentos.js";
 
 function escapar(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, (c) => (
@@ -153,7 +155,11 @@ function htmlComprovanteVenda(venda) {
     ${linhas([
       ["Nome", escapar(venda.cliente_nome)],
       ["CPF", venda.cliente_cpf ? escapar(fmtCpf(venda.cliente_cpf)) : ""],
+      ["RG", venda.cliente_endereco?.rg ? escapar(venda.cliente_endereco.rg) : ""],
+      ["Nascimento", escapar(dataNascimentoBr(venda.cliente_endereco?.nascimento))],
       ["Telefone", venda.cliente_telefone ? escapar(fmtTel(venda.cliente_telefone)) : ""],
+      ["E-mail", venda.cliente_endereco?.email ? escapar(venda.cliente_endereco.email) : ""],
+      ["Endereço", escapar(enderecoEmUmaLinha(venda.cliente_endereco))],
     ])}
 
     <h2>Motocicleta</h2>
@@ -193,7 +199,7 @@ function htmlContratoVenda(venda) {
 
     <p><strong>VENDEDORA:</strong> ${escapar(loja.nome)}${loja.documento ? `, inscrita sob ${escapar(loja.documento)}` : ""}${loja.telefone ? `, telefone ${escapar(loja.telefone)}` : ""}.</p>
     <p><strong>Vendedor responsável:</strong> ${vendedorComContato(venda.vendedor_nome)}.</p>
-    <p><strong>COMPRADOR:</strong> ${escapar(venda.cliente_nome)}${venda.cliente_cpf ? `, CPF ${escapar(fmtCpf(venda.cliente_cpf))}` : ""}${venda.cliente_telefone ? `, telefone ${escapar(fmtTel(venda.cliente_telefone))}` : ""}.</p>
+    <p><strong>COMPRADOR:</strong> ${escapar(venda.cliente_nome)}${venda.cliente_cpf ? `, CPF ${escapar(fmtCpf(venda.cliente_cpf))}` : ""}${venda.cliente_endereco?.rg ? `, RG ${escapar(venda.cliente_endereco.rg)}` : ""}${venda.cliente_telefone ? `, telefone ${escapar(fmtTel(venda.cliente_telefone))}` : ""}${enderecoEmUmaLinha(venda.cliente_endereco) ? `, residente em ${escapar(enderecoEmUmaLinha(venda.cliente_endereco))}` : ""}.</p>
 
     <p>As partes acima têm entre si, justo e contratado, a compra e venda do veículo abaixo, que se regerá pelas cláusulas seguintes:</p>
 
