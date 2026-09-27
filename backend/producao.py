@@ -105,12 +105,18 @@ async def preparar() -> None:
 
     try:
         # `create_all` só cria o que falta e não encosta em tabela que já
-        # existe. É o bastante pro primeiro deploy e pra qualquer tabela
-        # nova. **Não** é o bastante pra coluna nova numa tabela que já
-        # existe: no dia em que um campo mudar, a ferramenta certa é o
-        # Alembic. Está escrito no DEPLOY.md.
+        # existe: resolve tabela nova, não coluna nova.
         async with engine.begin() as conexao:
             await conexao.run_sync(Base.metadata.create_all)
+
+        # Coluna nova numa tabela que já existe é o `migracoes`. Sem esta
+        # chamada, o campo novo ficava só no desenvolvimento e o site quebrava
+        # em produção na primeira tela que lesse a coluna que não existia lá.
+        from migracoes import aplicar
+
+        feitas = await aplicar(engine)
+        for feita in feitas:
+            print(f"   migracao: {feita}", flush=True)
 
         await _garantir_dono()
     except Exception as erro:

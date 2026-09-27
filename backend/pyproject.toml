@@ -17,6 +17,10 @@ dependencies = [
     "pyjwt>=2.10",
     "bcrypt>=4.2",
     "python-multipart>=0.0.17",
+    # Ler o XML da nota fiscal que vem no backup do sistema antigo. A
+    # biblioteca padrão do Python é explicitamente insegura pra XML de fora:
+    # uma nota com poucas linhas de DTD consome toda a memória da máquina.
+    "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]

@@ -5,9 +5,16 @@ uma coluna nova nunca chega sozinha num banco que já tem dados. Estas
 migrações rodam toda vez que o servidor sobe e não fazem nada quando já foram
 aplicadas, então é seguro repetir.
 
-Isto **não** substitui uma ferramenta de migração de verdade (Alembic) no dia
-em que o sistema for pra produção com Postgres. Resolve o banco de
-desenvolvimento sem obrigar o dono a apagar o que já cadastrou pra testar.
+**Rodam no Postgres também.** Antes saíam fora de qualquer banco que não fosse
+SQLite, com o argumento de que produção é assunto de migração versionada. O
+efeito prático foi outro: campo novo entrava no desenvolvimento e **nunca
+chegava em produção**, e o site quebrava na tela que lia a coluna que não
+existia lá. Enquanto não houver Alembic, é aqui que a coluna nova chega — e as
+duas coisas que este arquivo faz (`ADD COLUMN` e `CREATE INDEX`) são as duas
+mais seguras de repetir que existem.
+
+Isto **não** substitui o Alembic no dia em que uma migração precisar mexer em
+dado que já está gravado. Está escrito no DEPLOY.md.
 """
 
 from sqlalchemy import text
@@ -15,17 +22,23 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 async def _colunas(conexao, tabela: str) -> set[str]:
-    linhas = await conexao.execute(text(f"PRAGMA table_info({tabela})"))
-    return {linha[1] for linha in linhas}
+    """As colunas que a tabela já tem. Cada banco conta isso do seu jeito:
+    o SQLite pelo `PRAGMA`, o Postgres pelo catálogo."""
+    if conexao.dialect.name == "sqlite":
+        linhas = await conexao.execute(text(f"PRAGMA table_info({tabela})"))
+        return {linha[1] for linha in linhas}
+    linhas = await conexao.execute(
+        text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = :t"
+        ),
+        {"t": tabela},
+    )
+    return {linha[0] for linha in linhas}
 
 
 async def aplicar(engine: AsyncEngine) -> list[str]:
     """Devolve o que foi aplicado agora — vazio quando não havia nada a fazer."""
-    if engine.dialect.name != "sqlite":
-        # Postgres é o banco de produção, e lá o esquema é assunto de
-        # migração versionada, não deste atalho.
-        return []
-
     feitas: list[str] = []
     async with engine.begin() as conexao:
         if "id_cliente" not in await _colunas(conexao, "despesa_moto"):
