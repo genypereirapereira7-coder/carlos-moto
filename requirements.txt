@@ -21,9 +21,19 @@ pydantic-settings==2.15.0
 PyJWT==2.13.0
 
 # --- envio de arquivo -----------------------------------------------------
-# É ele que o FastAPI usa pra receber o banco do sistema antigo pela tela
-# (`rotas/migracao.py`). Sai junto com a migração, quando ela acabar.
+# É ele que o FastAPI usa pra receber arquivo enviado pela tela: hoje o backup
+# do sistema antigo, na aba Dados (`rotas/dados.py`).
 python-multipart==0.0.32
+
+# --- ler o XML da nota fiscal --------------------------------------------
+# A aba Dados abre a NF-e que vem dentro do backup. A biblioteca padrão do
+# Python é explicitamente insegura pra XML de fora — uma nota com poucas
+# linhas de DTD consome toda a memória da máquina. Esta recusa DTD, entidade
+# externa e bomba de expansão.
+#
+# Faltar aqui derruba o site inteiro, não só a nota: o import falha antes de o
+# servidor subir, e todas as telas dão 502. Já aconteceu.
+defusedxml==0.7.1
 
 # Saiu daqui de propósito:
 #   bcrypt  — o sistema não tem senha; a chave de acesso é SHA-256
