@@ -92,12 +92,21 @@ let motoAbertaId = null;
 // recém-criada. Só a última abertura pedida tem direito de escrever.
 let pedidoDetalhe = 0;
 
+// Filtro do estoque: "todas", "DISPONIVEL" ou "VENDIDA". Sobrevive ao
+// re-render do WebSocket, como os estados acima.
+let filtroMotos = "todas";
+
 export async function renderMotos(raiz) {
   raiz.innerHTML = `
     <h2>Motos</h2>
     <div class="barra-busca">
       <input id="busca-placa" placeholder="Digite a placa (ABC1234 ou ABC1D23)" autocomplete="off" maxlength="8" />
       <button class="botao botao--fantasma" id="botao-nova-moto" type="button">Cadastrar moto</button>
+    </div>
+    <div class="abas-filtro" id="filtro-motos">
+      <button class="aba-filtro" data-filtro="todas" type="button">Todas</button>
+      <button class="aba-filtro" data-filtro="DISPONIVEL" type="button">Disponíveis</button>
+      <button class="aba-filtro" data-filtro="VENDIDA" type="button">Vendidas</button>
     </div>
     <div id="detalhe-moto"></div>
     <div class="cartao">
@@ -128,11 +137,27 @@ export async function renderMotos(raiz) {
       // lista demora o bastante pra dar tempo de trocar de aba.
       const onde = corpoTabela();
       if (!onde) return;
-      if (!motos.length) {
-        onde.innerHTML = '<tr><td colspan="5" class="fraco">Nenhuma moto cadastrada ainda.</td></tr>';
+
+      const rotulos = { todas: "Todas", DISPONIVEL: "Disponíveis", VENDIDA: "Vendidas" };
+      const contagem = {
+        todas: motos.length,
+        DISPONIVEL: motos.filter((m) => m.status === "DISPONIVEL").length,
+        VENDIDA: motos.filter((m) => m.status === "VENDIDA").length,
+      };
+      raiz.querySelectorAll("#filtro-motos .aba-filtro").forEach((botao) => {
+        const f = botao.dataset.filtro;
+        botao.dataset.ativa = f === filtroMotos ? "1" : "0";
+        botao.textContent = `${rotulos[f]} (${contagem[f]})`;
+      });
+
+      const visiveis = filtroMotos === "todas"
+        ? motos
+        : motos.filter((m) => m.status === filtroMotos);
+      if (!visiveis.length) {
+        onde.innerHTML = '<tr><td colspan="5" class="fraco">Nenhuma moto aqui ainda.</td></tr>';
         return;
       }
-      onde.innerHTML = motos.map((m) => `
+      onde.innerHTML = visiveis.map((m) => `
         <tr data-id="${m.id}">
           <td>${escapar(m.placa || "—")}</td>
           <td data-rotulo="Marca / Modelo">${escapar(m.marca)} ${escapar(m.modelo)}</td>
@@ -221,6 +246,7 @@ export async function renderMotos(raiz) {
           <h3>${escapar(m.marca)} ${escapar(m.modelo)} ${m.ano} ${m.placa ? `— ${escapar(m.placa)}` : ""}</h3>
           <div class="acoes-linha">
             ${m.status === "DISPONIVEL" ? '<button class="botao" id="botao-vender-moto" type="button">Vender</button>' : ""}
+            ${m.status === "DISPONIVEL" ? '<button class="botao botao--perigo" id="botao-excluir-moto" type="button">Excluir</button>' : ""}
             <button class="botao botao--fantasma" id="botao-editar-moto" type="button">Editar</button>
             <button class="botao botao--fantasma" id="botao-lancar-despesa" type="button">Lançar gasto</button>
             <button class="botao botao--fantasma" id="botao-fechar-moto" type="button">Fechar</button>
@@ -294,6 +320,18 @@ export async function renderMotos(raiz) {
         await carregarLista();
         await abrirDetalhe(moto.id);
       });
+    });
+    raiz.querySelector("#botao-excluir-moto")?.addEventListener("click", async () => {
+      const nome = `${moto.marca} ${moto.modelo} ${moto.ano}${moto.placa ? ` — ${moto.placa}` : ""}`;
+      if (!window.confirm(`Excluir a moto ${nome}? Isso não tem volta.`)) return;
+      try {
+        await api.enviar("DELETE", `/motos/${moto.id}`);
+        motoAbertaId = null;
+        detalheEl().innerHTML = "";
+        await carregarLista();
+      } catch (erro) {
+        avisar(mensagemDeErro(erro), "erro");
+      }
     });
 
     // Documentos de compra — montados direto da moto (fornecedor, valor, data).
@@ -671,6 +709,13 @@ export async function renderMotos(raiz) {
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");
     if (linha) abrirDetalhe(linha.dataset.id);
+  });
+
+  raiz.querySelectorAll("#filtro-motos .aba-filtro").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      filtroMotos = botao.dataset.filtro;
+      carregarLista();
+    });
   });
 
   await carregarLista();

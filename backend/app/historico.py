@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.models.historico import AcaoHistorico, Historico
 from app.models.dado_antigo import LinhaAntiga
+from app.models.moto import Moto, StatusMoto
 from app.models.usuario import SessaoAuth
 
 # Não entram no histórico. `Historico` por razão óbvia (seria infinito),
@@ -129,11 +130,18 @@ def _barrar_delete_em_massa(estado):
 @event.listens_for(Session, "before_flush")
 def _antes_de_gravar(sessao, _contexto, _instancias):
     if sessao.deleted:
-        quais = ", ".join(sorted({type(o).__name__ for o in sessao.deleted}))
-        raise ApagarProibido(
-            f"Este sistema não apaga registro ({quais}). "
-            "Desative, pause ou cancele — o registro continua no banco."
-        )
+        # Única exceção ao "nada é apagado": moto ainda em estoque (DISPONIVEL),
+        # que nunca foi vendida. Não há venda nem carnê em cima dela — é só uma
+        # moto cadastrada errado. A vendida continua intocável.
+        if not all(
+            isinstance(o, Moto) and o.status == StatusMoto.DISPONIVEL
+            for o in sessao.deleted
+        ):
+            quais = ", ".join(sorted({type(o).__name__ for o in sessao.deleted}))
+            raise ApagarProibido(
+                f"Este sistema não apaga registro ({quais}). "
+                "Desative, pause ou cancele — o registro continua no banco."
+            )
 
     pendentes = []
     for obj in sessao.new:

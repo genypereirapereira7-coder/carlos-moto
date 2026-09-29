@@ -29,6 +29,7 @@ class Evento(str, enum.Enum):
     MOTO_CADASTRADA = "moto.cadastrada"
     MOTO_ATUALIZADA = "moto.atualizada"
     MOTO_VENDIDA = "moto.vendida"
+    MOTO_EXCLUIDA = "moto.excluida"
     DESPESA_LANCADA = "despesa.lancada"
     VENDA_REGISTRADA = "venda.registrada"
     CLIENTE_CADASTRADO = "cliente.cadastrado"
@@ -44,6 +45,7 @@ DESTINOS: dict[Evento, tuple[Papel, ...]] = {
     # dois vendedores olhando a mesma moto, o segundo não pode continuar
     # oferecendo o que o primeiro acabou de vender.
     Evento.MOTO_VENDIDA: (Papel.VENDEDOR, Papel.DONO),
+    Evento.MOTO_EXCLUIDA: (Papel.VENDEDOR, Papel.DONO),
     Evento.MOTO_CADASTRADA: (Papel.VENDEDOR, Papel.DONO),
     Evento.MOTO_ATUALIZADA: (Papel.VENDEDOR, Papel.DONO),
     Evento.VENDA_REGISTRADA: (Papel.DONO,),

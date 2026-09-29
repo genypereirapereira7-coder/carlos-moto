@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencias import SessaoDep, SoDono, SoVendedor
-from app.models.moto import CondicaoMoto, Moto
+from app.models.moto import CondicaoMoto, Moto, StatusMoto
 from app.schemas.despesa import DespesaEntrada, DespesaSaida
 from app.schemas.moto import (
     MotoEntrada,
@@ -170,6 +170,25 @@ async def editar(moto_id: int, dados: MotoPatch, sessao: SessaoDep, _: SoDono):
     saida = MotoSaida.model_validate(moto)
     await publicar_apos_commit(sessao, Evento.MOTO_ATUALIZADA, saida.model_dump(mode="json"))
     return saida
+
+
+@rotas.delete("/{moto_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir(moto_id: int, sessao: SessaoDep, _: SoDono):
+    """Exclui uma moto que ainda está em estoque (DISPONIVEL).
+
+    É a única exceção ao "nada é apagado": a moto vendida tem venda, carnê e
+    histórico financeiro em cima e não sai nunca. A que está em estoque —
+    cadastrada errado, por exemplo — pode sumir.
+    """
+    moto = await sessao.get(Moto, moto_id)
+    if moto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Moto não existe")
+    if moto.status != StatusMoto.DISPONIVEL:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Moto vendida não pode ser excluída")
+
+    await sessao.delete(moto)
+    await sessao.flush()
+    await publicar_apos_commit(sessao, Evento.MOTO_EXCLUIDA, {"id": moto.id})
 
 
 @rotas.post(
