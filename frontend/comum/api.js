@@ -153,10 +153,21 @@ export function renovarSessao() {
  *   conexão" por causa de um pedido que o dono nem fez.
  */
 export async function pedir(metodo, caminho, corpo = null, opcoes = {}) {
-  const { autenticado = true, jaRenovou = false, avisarOrigem = true } = opcoes;
+  const { autenticado = true, jaRenovou = false, avisarOrigem = true, forcarRede = false } = opcoes;
 
   if (autenticado && !sessao) {
     throw new ErroApi(401, "Sem sessão");
+  }
+
+  // Leitura instantânea: devolve a última resposta guardada na hora e renova
+  // em segundo plano. Só a própria renovação (`forcarRede`) pula isto, pra
+  // não ler o cache que ela mesma vai atualizar.
+  if (metodo === "GET" && autenticado && !forcarRede) {
+    const guardado = await cache.ler(caminho);
+    if (guardado) {
+      _renovarEmSegundoPlano(caminho);
+      return guardado.dados;
+    }
   }
 
   const cabecalhos = {};
@@ -206,6 +217,48 @@ export async function pedir(metodo, caminho, corpo = null, opcoes = {}) {
   }
 
   return dados;
+}
+
+// ----------------------------------------------------- renovação em 2º plano
+
+const ouvintesAtualizacao = new Set();
+
+export function aoAtualizar(callback) {
+  ouvintesAtualizacao.add(callback);
+  return () => ouvintesAtualizacao.delete(callback);
+}
+
+function _avisarAtualizado() {
+  for (const ouvinte of ouvintesAtualizacao) {
+    try {
+      ouvinte();
+    } catch (erro) {
+      console.warn("[api] ouvinte de atualização falhou", erro);
+    }
+  }
+}
+
+function _renovarEmSegundoPlano(caminho) {
+  // Não trava a tela: ela já mostrou a cópia guardada. Quando a resposta nova
+  // chegar (e for diferente), avisa pra tela se redesenhar. Sem rede, mantém
+  // a cópia e avisa que ela é de antes.
+  (async () => {
+    const antes = await cache.ler(caminho).catch(() => null);
+    try {
+      await pedir("GET", caminho, null, { forcarRede: true, avisarOrigem: false });
+      const depois = await cache.ler(caminho);
+      if (depois?.gravadoEm !== antes?.gravadoEm) {
+        _avisarOrigem({ deCache: false });
+        if (JSON.stringify(antes?.dados) !== JSON.stringify(depois?.dados)) {
+          _avisarAtualizado();
+        }
+      } else if (antes) {
+        _avisarOrigem({ deCache: true, gravadoEm: antes.gravadoEm });
+      }
+    } catch {
+      if (antes) _avisarOrigem({ deCache: true, gravadoEm: antes.gravadoEm });
+    }
+  })();
 }
 
 /**

@@ -203,6 +203,14 @@ api.aoMudarOrigem(({ deCache, gravadoEm }) => {
   faixaOffline.hidden = false;
 });
 
+// A renovação em segundo plano trouxe dado novo: redesenha a aba aberta na
+// hora, sem o "Carregando…" da primeira abertura.
+api.aoAtualizar(() => {
+  if (abaAtual && TELAS[abaAtual]) {
+    TELAS[abaAtual](conteudo);
+  }
+});
+
 // ---------------------------------------------------------------- instalar
 
 // Três portas pro mesmo lugar, porque cada uma pega o dono num momento:
