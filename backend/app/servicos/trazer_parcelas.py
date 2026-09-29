@@ -1,4 +1,4 @@
-"""Trazer as parcelas em aberto do sistema antigo pra aba PARCELAS.
+"""Trazer as parcelas do sistema antigo pra aba PARCELAS (histórico completo).
 
 Uma parcela no sistema novo não vive sozinha: ela pendura numa venda, que
 pendura numa moto e num cliente. Então trazer a dívida significa reconstruir a
@@ -12,12 +12,10 @@ item da venda **não tem campo de placa nem de marca**: os dois vivem soltos
 dentro da descrição, escrita à mão pelo balcão — `BIZ 125 ES 2013 NDB1A23`. Daí
 a leitura por padrão de texto aqui embaixo.
 
-**Por que a venda entra com o preço cheio e só as parcelas que faltam:** o que
-o cliente já pagou está em `recebidas`, e trazer 10.954 pagamentos pra
-reconstituir carnê antigo não é o que a loja precisa — ela precisa saber quanto
-ainda tem pra receber. Então a venda guarda o valor real dela, o carnê recebe
-só as parcelas que continuam abertas com o número que elas tinham, e a
-observação da venda diz onde está o resto.
+**O que entra.** Lê `parcelas` (em aberto) e `recebidas` (já pagas) pra
+reconstruir o carnê inteiro de cada venda: a parcela paga entra quitada (com o
+pagamento no valor cheio e `pago_em` marcado), a aberta entra devendo. Assim o
+histórico fica no sistema novo, e não só o que ainda tem pra receber.
 """
 
 import logging
@@ -33,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.cliente import Cliente
 from app.models.dado_antigo import LinhaAntiga
 from app.models.moto import CondicaoMoto, Moto, StatusMoto
+from app.models.pagamento_parcela import PagamentoParcela
 from app.models.parcela import Parcela
 from app.models.venda import FormaPagamento, Venda
 
@@ -113,12 +112,6 @@ def _data(valor: str | None) -> date | None:
         return None
     # `0001-01-01` é o "vazio" do sistema antigo.
     return d if d.year >= 1900 else None
-
-
-def _em_aberto(parcela: dict) -> bool:
-    """Parcela que o cliente ainda deve. No sistema antigo, `data_pagto` vazia
-    (ou `0001-01-01`) é o que marca isso — as pagas foram pra `recebidas`."""
-    return _data(parcela.get("data_pagto")) is None
 
 
 def achar_placa(texto: str) -> str | None:
@@ -206,11 +199,12 @@ async def _linhas(sessao: AsyncSession, lote_id: uuid.UUID, tabela: str) -> list
 async def trazer_parcelas(
     sessao: AsyncSession, lote_id: uuid.UUID, usuario_id: int
 ) -> ResultadoParcelas:
-    """Reconstrói moto + venda + carnê de cada venda que ainda tem parcela em
-    aberto no sistema antigo."""
+    """Reconstrói moto + venda + carnê do histórico completo de cada venda do
+    sistema antigo — parcelas em aberto (`parcelas`) e já pagas (`recebidas`)."""
     r = ResultadoParcelas()
 
     antigas = await _linhas(sessao, lote_id, "parcelas")
+    antigas += await _linhas(sessao, lote_id, "recebidas")
     pedidos = {(p.get("nrped") or "").strip(): p for p in await _linhas(sessao, lote_id, "pedidos")}
     itens: dict[str, list[dict]] = {}
     for item in await _linhas(sessao, lote_id, "it_pedid"):
@@ -227,11 +221,10 @@ async def trazer_parcelas(
     }
     vendas_existentes = set((await sessao.execute(select(Venda.id_cliente))).scalars().all())
 
-    # Uma venda por pedido, com as parcelas dele juntas.
+    # Uma venda por pedido, com as parcelas dele juntas (abertas e pagas).
     por_pedido: dict[str, list[dict]] = {}
     for parcela in antigas:
-        if _em_aberto(parcela):
-            por_pedido.setdefault((parcela.get("nrped") or "").strip(), []).append(parcela)
+        por_pedido.setdefault((parcela.get("nrped") or "").strip(), []).append(parcela)
 
     for numero, parcelas in sorted(por_pedido.items()):
         nome = (parcelas[0].get("nome") or "").strip()[:120]
@@ -298,11 +291,7 @@ async def trazer_parcelas(
             forma_pagamento=FormaPagamento.PARCELADO,
             preco_venda_centavos=_centavos(pedido.get("valor")),
             data_venda=_meio_dia_utc(emissao) if emissao else _meio_dia_utc(date.today()),
-            observacao=(
-                f"Venda nº {numero} do sistema antigo. Só as parcelas que continuam "
-                "em aberto foram trazidas; o que já foi pago está na aba Dados, "
-                "em \"Parcelas já recebidas\"."
-            ),
+            observacao=f"Venda nº {numero} do sistema antigo.",
         )
         sessao.add(venda)
         await sessao.flush()
@@ -320,13 +309,22 @@ async def trazer_parcelas(
                 numero_parcela = int(_digitos(antiga.get("pc")) or 0)
             except ValueError:
                 numero_parcela = 0
-            sessao.add(Parcela(
+            # `data_pagto` preenchida = parcela já recebida no sistema antigo.
+            # Aí ela entra quitada: um pagamento no valor cheio, espelhado no
+            # `pago_em` — igual ao fluxo normal de registrar pagamento.
+            data_pgto = _data(antiga.get("data_pagto"))
+            parcela = Parcela(
                 venda_id=venda.id,
                 numero=numero_parcela or (r.parcelas + 1),
                 valor_centavos=valor,
                 vencimento=vencimento,
                 pagamentos=[],
-            ))
+            )
+            if data_pgto:
+                momento = _meio_dia_utc(data_pgto)
+                parcela.pagamentos.append(PagamentoParcela(valor_centavos=valor, pago_em=momento))
+                parcela.pago_em = momento
+            sessao.add(parcela)
             r.parcelas += 1
             r.centavos += valor
 
