@@ -221,9 +221,26 @@ async def trazer_parcelas(
     }
     vendas_existentes = set((await sessao.execute(select(Venda.id_cliente))).scalars().all())
 
-    # Uma venda por pedido, com as parcelas dele juntas (abertas e pagas).
-    por_pedido: dict[str, list[dict]] = {}
+    # Uma venda por pedido, com cada parcela uma única vez. A mesma parcela
+    # pode aparecer nas duas tabelas — aberta em `parcelas` e paga em
+    # `recebidas` (pagamento em pedaços). Nesse caso a paga é o estado final
+    # e vence a duplicação.
+    por_parcela: dict[tuple[str, str], dict] = {}
     for parcela in antigas:
+        nrped = (parcela.get("nrped") or "").strip()
+        pc = (parcela.get("pc") or "").strip()
+        chave = (nrped, pc) if pc else (nrped, f"vazio-{len(por_parcela)}")
+        atual = por_parcela.get(chave)
+        if atual is None:
+            por_parcela[chave] = parcela
+        elif (
+            _data(parcela.get("data_pagto")) is not None
+            and _data(atual.get("data_pagto")) is None
+        ):
+            por_parcela[chave] = parcela
+
+    por_pedido: dict[str, list[dict]] = {}
+    for parcela in por_parcela.values():
         por_pedido.setdefault((parcela.get("nrped") or "").strip(), []).append(parcela)
 
     for numero, parcelas in sorted(por_pedido.items()):
