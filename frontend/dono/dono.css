@@ -132,9 +132,9 @@ body {
 }
 
 .lateral {
-  background: var(--grafite);
+  background: #ffffff;
   border-right: 1px solid var(--linha);
-  color: #fff;
+  color: var(--tinta);
   display: flex;
   flex-direction: column;
   padding: 20px 14px;
@@ -157,7 +157,7 @@ body {
   text-align: left;
   padding: 12px 14px;
   border-radius: 10px;
-  color: #e8e4de;
+  color: var(--tinta-fraca);
   font-weight: 600;
 }
 
@@ -165,7 +165,7 @@ body {
    fica parecendo selecionado até tocar em outro lugar. */
 @media (hover: hover) {
   .aba:hover {
-    background: rgb(255 255 255 / 8%);
+    background: rgb(0 0 0 / 5%);
   }
 }
 
@@ -180,7 +180,7 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border-top: 1px solid rgb(255 255 255 / 12%);
+  border-top: 1px solid var(--linha);
 }
 
 .conteudo {
@@ -797,14 +797,13 @@ table.tabela tbody tr {
   border-color: var(--vermelho);
 }
 
-/* Cartão escuro sobre fundo escuro some sem uma borda: a sombra, que no claro
-   separa os dois, quase não aparece aqui. */
+/* Cartão sobre fundo claro ganha uma borda sutil pra separar do fundo. */
 .cartao {
-  border: 1px solid rgb(255 255 255 / 6%);
+  border: 1px solid var(--linha);
 }
 
 a {
-  color: #f39a61;
+  color: #4a4a4f;
 }
 
 /* Texto branco sobre o laranja da marca dá 3.6:1 — abaixo dos 4.5:1 que
@@ -1260,7 +1259,7 @@ table.tabela tr.detalhe-dia td {
   }
 
   .botao-mais[aria-expanded="true"] {
-    background: rgb(255 255 255 / 10%);
+    background: rgb(0 0 0 / 8%);
   }
 
   /* ------------------------------------------------------ abas, embaixo */
@@ -1275,7 +1274,7 @@ table.tabela tr.detalhe-dia td {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     padding: 6px 6px calc(6px + var(--seguro-baixo));
-    background: var(--grafite);
+    background: #ffffff;
     border-top: 1px solid var(--linha);
   }
 
