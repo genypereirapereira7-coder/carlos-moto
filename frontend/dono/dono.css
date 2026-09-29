@@ -17,23 +17,23 @@
  * data, a lista aberta de um select, a barra de rolagem.
  */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --grafite: #0f0e0c;
-  --tinta: #f1ebe3;
-  --tinta-fraca: #a59c91;
-  --linha: #36312b;
-  --papel: #1e1b18;
-  --fundo: #151311;
-  --laranja-claro: #6b3d22;
-  --laranja-fundo: #2b1e15;
-  --verde: #45c489;
-  --verde-fundo: #15301f;
-  --amarelo: #e6a93e;
-  --amarelo-fundo: #34280f;
-  --vermelho: #ff6f84;
-  --vermelho-fundo: #3b1a21;
-  --sombra: 0 2px 12px rgb(0 0 0 / 45%);
+  --grafite: #4a4a4f;
+  --tinta: #211d1a;
+  --tinta-fraca: #6f665e;
+  --linha: #e4ddd3;
+  --papel: #ffffff;
+  --fundo: #f5f1ea;
+  --laranja-claro: #dcdce1;
+  --laranja-fundo: #f1f1f4;
+  --verde: #1c8c5a;
+  --verde-fundo: #e6f6ee;
+  --amarelo: #b8730a;
+  --amarelo-fundo: #fff4d9;
+  --vermelho: #c62c46;
+  --vermelho-fundo: #ffe9ed;
+  --sombra: 0 2px 8px rgb(33 29 26 / 12%);
 }
 
 html {
@@ -813,7 +813,7 @@ a {
    "desfazer") o laranja claro é que lê melhor, então `--laranja` fica como
    está e este é outro token. */
 :root {
-  --laranja-forte: #bd521a;
+  --laranja-forte: #4a4a4f;
 }
 
 /* Os `:not` impedem que o botão fantasma (Editar, Cancelar, Sair) e o de
