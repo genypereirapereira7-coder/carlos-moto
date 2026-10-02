@@ -6,7 +6,7 @@
 # É este arquivo que a Railway lê pra montar o contêiner.
 
 # --- servidor -------------------------------------------------------------
-fastapi==0.141.1
+fastapi==0.142.1
 uvicorn[standard]==0.52.1
 
 # --- banco ----------------------------------------------------------------
