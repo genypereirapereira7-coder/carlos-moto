@@ -15,6 +15,7 @@ from app.schemas.moto import (
     VendaDaMoto,
 )
 from app.servicos import motos as servico
+from app.servicos import vendas as servico_vendas
 from app.servicos.eventos import Evento, publicar_apos_commit
 
 rotas = APIRouter(prefix="/motos", tags=["motos"])
@@ -189,6 +190,30 @@ async def excluir(moto_id: int, sessao: SessaoDep, _: SoDono):
     await sessao.delete(moto)
     await sessao.flush()
     await publicar_apos_commit(sessao, Evento.MOTO_EXCLUIDA, {"id": moto.id})
+
+
+@rotas.post("/{moto_id}/devolver-ao-estoque", response_model=MotoSaida)
+async def devolver_ao_estoque(moto_id: int, sessao: SessaoDep, _: SoDono):
+    """Desfaz a venda e põe a moto de volta no estoque.
+
+    Pro cliente que desistiu e devolveu a moto, e pra venda lançada na moto
+    errada. A venda e o carnê continuam gravados (nada é apagado), só param de
+    contar como dívida e liberam a moto pra ser vendida de novo.
+    """
+    moto = await sessao.get(Moto, moto_id)
+    if moto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Moto não existe")
+    try:
+        await servico_vendas.devolver_ao_estoque(sessao, moto)
+    except servico_vendas.MotoNaoVendida as erro:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Esta moto não está vendida"
+        ) from erro
+
+    await publicar_apos_commit(
+        sessao, Evento.MOTO_ATUALIZADA, {"id": moto.id, "status": moto.status.value}
+    )
+    return MotoSaida.model_validate(moto)
 
 
 @rotas.post(

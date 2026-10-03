@@ -61,6 +61,7 @@ async def listar_pendentes(sessao: AsyncSession) -> list[tuple[Parcela, Venda, C
     consulta = (
         select(Parcela, Venda, Cliente, Moto)
         .join(Venda, Venda.id == Parcela.venda_id)
+        .where(Venda.cancelada_em.is_(None))
         .join(Cliente, Cliente.id == Venda.cliente_id)
         .join(Moto, Moto.id == Venda.moto_id)
         .where(Parcela.pago_em.is_(None))

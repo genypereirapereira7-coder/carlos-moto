@@ -31,10 +31,14 @@ function escapar(valor) {
  * padrão sai só o nome, sem inventar documento de ninguém.
  */
 export function dadosLoja() {
+  // Os dados que saem no contrato e na nota promissória, como estão nos
+  // documentos que a loja já usa em papel.
   const padrao = {
-    nome: "Monte São Motos",
-    documento: "",
-    endereco: "",
+    nome: "MONTE SIÃO MOTOS",
+    documento: "27.415.529/0001-22",
+    endereco: "AV NORTE SUL, 4097 - ROLIM DE MOURA - RO",
+    cidade: "ROLIM DE MOURA",
+    uf: "RO",
     telefone: "+55 69 99212-5902",
   };
   try {
@@ -182,63 +186,149 @@ function htmlComprovanteVenda(venda) {
     </div>`;
 }
 
-/** Contrato da venda — moto, preço, parcelas e avalistas. */
+/**
+ * Contrato de compra e venda a prazo — o mesmo documento que a loja já usa em
+ * papel, preenchido pelo sistema.
+ *
+ * O texto das cláusulas é o da Monte Sião Motos e **não se mexe**: juros de
+ * mora de 0,23% ao dia, retomada do veículo com duas parcelas em atraso,
+ * multa de 20% por desistência. O que muda de um contrato pro outro são só os
+ * dados — comprador, moto, valores, parcelas e avalistas.
+ */
 function htmlContratoVenda(venda) {
   const loja = dadosLoja();
-  const parcelado = venda.forma_pagamento === "PARCELADO";
+  const e = venda.cliente_endereco || {};
   const m = venda.moto;
-  const clausulaPagamento = parcelado
-    ? `O pagamento será feito de forma parcelada no carnê da própria loja, conforme a tabela de parcelas
-       abaixo, comprometendo-se o COMPRADOR a quitar cada parcela até a respectiva data de vencimento.`
-    : `O pagamento é feito na modalidade <strong>${escapar((ROTULO_FORMA[venda.forma_pagamento] || "").toLowerCase())}</strong>,
-       dando a VENDEDORA plena quitação do valor acordado.`;
+  const parcelas = venda.parcelas || [];
+  const entrada = venda.valor_entrada_centavos || 0;
+  const avalistas = venda.avalistas || [];
+
+  // A "fatura" é o número que amarra as parcelas umas às outras e à nota —
+  // no papel antigo era o número do pedido com a série na frente.
+  const fatura = numeroDaFatura(venda);
+
+  const endereco = [e.endereco, e.numero].filter(Boolean).join(", ");
+
   return `
-    ${linhaLoja()}
-    <h2 class="doc-titulo">Contrato de compra e venda de motocicleta</h2>
-    <p class="doc-data">${escapar(dataBr(venda.data_venda))}</p>
+    <h2 class="doc-titulo doc-titulo--caixa">CONTRATO DE COMPRA E VENDA A PRAZO</h2>
 
-    <p><strong>VENDEDORA:</strong> ${escapar(loja.nome)}${loja.documento ? `, inscrita sob ${escapar(loja.documento)}` : ""}${loja.telefone ? `, telefone ${escapar(loja.telefone)}` : ""}.</p>
-    <p><strong>Vendedor responsável:</strong> ${vendedorComContato(venda.vendedor_nome)}.</p>
-    <p><strong>COMPRADOR:</strong> ${escapar(venda.cliente_nome)}${venda.cliente_cpf ? `, CPF ${escapar(fmtCpf(venda.cliente_cpf))}` : ""}${venda.cliente_endereco?.rg ? `, RG ${escapar(venda.cliente_endereco.rg)}` : ""}${venda.cliente_telefone ? `, telefone ${escapar(fmtTel(venda.cliente_telefone))}` : ""}${enderecoEmUmaLinha(venda.cliente_endereco) ? `, residente em ${escapar(enderecoEmUmaLinha(venda.cliente_endereco))}` : ""}.</p>
+    <h3 class="doc-secao">1 - Dados do Comprador</h3>
+    <div class="doc-grade">
+      <div><span>Nome:</span> <strong>${escapar(venda.cliente_nome)}</strong></div>
+      <div><span>Código:</span> ${String(venda.cliente_id).padStart(5, "0")}</div>
+      <div><span>Endereço:</span> ${escapar(endereco || "—")}</div>
+      <div><span>Bairro:</span> ${escapar(e.bairro || "—")}</div>
+      <div><span>Cidade:</span> ${escapar(e.cidade || "—")}</div>
+      <div><span>Estado:</span> ${escapar(e.uf || "—")}</div>
+      <div><span>CNPJ/CPF:</span> ${venda.cliente_cpf ? escapar(fmtCpf(venda.cliente_cpf)) : "—"}</div>
+      <div><span>Inscrição/RG:</span> ${escapar(e.rg || "—")}</div>
+    </div>
 
-    <p>As partes acima têm entre si, justo e contratado, a compra e venda do veículo abaixo, que se regerá pelas cláusulas seguintes:</p>
+    <h3 class="doc-secao">2 - Dados da Compra</h3>
+    <div class="doc-grade">
+      <div><span>Valor da Compra:</span> <strong>${reais(venda.preco_venda_centavos)}</strong></div>
+      <div><span>Nota Fiscal/Cupom Fiscal:</span> ${escapar(fatura.documento)}</div>
+      <div><span>Valor da Entrada:</span> ${reais(entrada)}</div>
+      <div><span>Emissão:</span> ${escapar(dataBr(venda.data_venda))}</div>
+    </div>
 
-    <h2>1. Objeto</h2>
-    <p>A VENDEDORA vende ao COMPRADOR a motocicleta:</p>
-    ${blocoMoto(m)}
+    <h3 class="doc-secao">3 - Desdobramento das Parcelas</h3>
+    ${parcelas.length ? `
+      <table class="doc-tabela">
+        <thead><tr><th>Fatura</th><th>PC</th><th>Vencimento</th><th>Valor</th></tr></thead>
+        <tbody>${parcelas.map((p) => `
+          <tr>
+            <td>${escapar(fatura.numero)}</td>
+            <td>${String(p.numero).padStart(2, "0")}</td>
+            <td>${escapar(dataBr(p.vencimento))}</td>
+            <td class="direita">${reais(p.valor_centavos)}</td>
+          </tr>`).join("")}</tbody>
+      </table>` : '<p class="fraco">Venda à vista — sem parcelas.</p>'}
 
-    <h2>2. Preço e pagamento</h2>
-    <p>O valor total da venda é de <strong>${escapar(reais(venda.preco_venda_centavos))}</strong>${
-      venda.valor_entrada_centavos ? `, com entrada de <strong>${escapar(reais(venda.valor_entrada_centavos))}</strong>` : ""
-    }. ${clausulaPagamento}${
-      venda.juros_centesimos
-        ? ` Sobre o saldo financiado incidem juros de <strong>${escapar((venda.juros_centesimos / 100).toFixed(2).replace(".", ","))}%</strong>, já embutidos nas parcelas abaixo.`
-        : ""
-    }</p>
-    ${parcelado ? tabelaParcelas(venda.parcelas) : ""}
+    <h3 class="doc-secao">4 - Itens da Venda</h3>
+    <table class="doc-tabela">
+      <tbody>
+        <tr>
+          <td>${String(m.id).padStart(6, "0")}</td>
+          <td>${escapar(`${m.modelo} ${m.ano}${m.placa ? ` ${m.placa}` : ""}`)}</td>
+          <td>${escapar(m.marca)}</td>
+          <td class="direita">1,00</td>
+          <td class="direita">${reais(venda.preco_venda_centavos)}</td>
+          <td class="direita">${reais(venda.preco_venda_centavos)}</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <h2>3. Entrega e propriedade</h2>
-    <p>O veículo é entregue no estado em que se encontra, conhecido e aceito pelo COMPRADOR. A transferência
-       da propriedade junto ao órgão de trânsito é de responsabilidade do COMPRADOR, que assume também os
-       encargos, multas e tributos a partir desta data.</p>
+    ${venda.observacao ? `<p class="doc-livre">${escapar(venda.observacao)}</p>` : ""}
+    ${avalistas.length ? `<p class="doc-livre">${avalistas.map((a) => (
+      `AVALISTA ${a.ordem} : ${escapar(a.nome)}`
+      + (a.cpf ? ` CPF: ${escapar(fmtCpf(a.cpf))}` : "")
+      + (a.telefone ? ` ${escapar(fmtTel(a.telefone))}` : "")
+    )).join("<br />")}</p>` : ""}
 
-    ${parcelado ? `
-    <h2>4. Reserva de domínio e inadimplência</h2>
-    <p>Enquanto houver parcela em aberto, o não pagamento de qualquer parcela na data de vencimento poderá
-       acarretar a cobrança do saldo devedor e demais medidas cabíveis, respondendo o COMPRADOR e os avalistas
-       abaixo, solidariamente, pelo valor devido.</p>
-    ${blocoAvalistas(venda.avalistas)}
-    ` : ""}
+    <p>Por este instrumento particular de contrato de compra e venda, a empresa ${escapar(loja.nome)}
+    ${loja.documento ? `inscrita no CNPJ nº ${escapar(loja.documento)}, ` : ""}${loja.endereco ? `estabelecida na ${escapar(loja.endereco)}` : ""}
+    doravante denominada ${escapar(loja.nome)} e o(a) COMPRADOR acima qualificado, tem justo e contratado o seguinte:</p>
 
-    <p class="doc-fecho">Por estarem assim justas e contratadas, as partes assinam o presente instrumento.</p>
+    <p>1ª - A ${escapar(loja.nome)} abre ao(a) COMPRADOR(A) um crédito para compra de mercadorias em seu estabelecimento.</p>
+    <p>2ª - o veiculo, objeto deste contrato é usado apresentando desgate natural decorrente do tempo, ja visto e inspecionado
+    pelo comprador, oqual tomou ciência de suas condições do estado de conservação.
+    a transferência da propriedade do veiculo por conta do COMPRADOR.</p>
+    <p>3ª - Do valor contratado poderá a ${escapar(loja.nome)} emitir duplicata(s) e/ou carnê(s) para pagamento(s) em única,
+    ou diversas prestações mensais e consecutivas, sendo que o(a) COMPRADOR(A) obriga-se a pagar dentro do(s) prazo(s)
+    a(s) prestação(ões), no estabelecimento da ${escapar(loja.nome)} e/ou boleto bancário caso seja emitido.</p>
+    <p>4ª - o vendedor se responsabiliza pelo documento do veiculo e multas do mesmo dessa data para traz, mais não
+    responsabilizará pelos danos causados no veiculo por negligência do COMPRADOR, e por problemas decorrentes.</p>
+    <p>5ª - A falta do pagamento, até o respectivo vencimento, das obrigações contraídas pelo(a) COMPRADOR(A) ficará ciente
+    que atraso de 2 duas parcela terá seu veiculo retido ao pátio da loja até o respectivo pagamento das parcela em atraso.
+    ${escapar(loja.nome)}</p>
+    <p>6ª - Havendo a inadimplência do(a) COMPRADOR(A), este se obrigará, além do débito principal, a encargos correspondentes
+    a juros de mora de 0,23% (zero vírgula vinte e três por cento) ao dia, correção monetária, despesas de cobrança,
+    honorários advocatício no importe de 10% (dez por cento) no caso de cobrança extrajudicial e, de 20% (vinte por centro)
+    no caso de cobrança judicial, custas e demais despesas, que serão considerados vencidos, líquidos, certos e exigíveis
+    para efeito de execução na forma da legislação em vigor.</p>
+    <p>7ª - Ocorrendo o caso de à ${escapar(loja.nome)} aceitar o(s) pagamento(s) de prestação(ões) vencida(s), será este ato
+    considerado simples liberdade da mesma, sem que constitua novação ou remuneração ou renuncia de direitos decorrentes
+    deste contrato, tampouco tido como dispensada de multa contratual, juros de mora, despesas de cobrança ou demais encargos.</p>
+    <p>8ª - caso haja desistência de qualquer das partes, fica convencionado uma multa equivalente 20% (vinte por cento)
+    do valor do contrato.</p>
+    <p>9ª - Fica eleito o foro da Comarca do local de celebração do presente contrato, com renuncia das partes de qualquer
+    outro, por mais privilegiado que seja, para dirimir as questões decorrentes deste instrumento.</p>
+    <p>E, por assim se acharem ajustados e contratados, acompanhados de duas testemunhas, firmam o presente instrumento
+    em duas vias.</p>
+
+    <p class="doc-local">Local ${escapar(loja.cidade || "")} , ${escapar(porExtensoData(venda.data_venda))} .</p>
 
     <div class="assinaturas">
-      ${assinatura(`VENDEDORA — ${loja.nome}`)}
-      ${assinatura(`COMPRADOR — ${venda.cliente_nome}`)}
+      ${assinatura("COMPRADOR(A)/DEPOSITÁRIO")}
+      ${assinatura(loja.nome)}
     </div>
-    ${parcelado && venda.avalistas && venda.avalistas.length
-      ? `<div class="assinaturas">${venda.avalistas.map((a) => assinatura(`Avalista ${a.ordem} — ${a.nome}`)).join("")}</div>`
-      : ""}`;
+    <div class="assinaturas">
+      ${assinatura("AVALISTA:<br />RG:<br />CPF:")}
+    </div>`;
+}
+
+/** `22 de Setembro de 2026` — como vai escrito no rodapé do contrato. */
+function porExtensoData(valor) {
+  const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const texto = String(valor || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return "";
+  const [a, m, d] = texto.split("-").map(Number);
+  return `${d} de ${MESES[m - 1]} de ${a}`;
+}
+
+/**
+ * O número que amarra contrato, carnê e nota promissória.
+ *
+ * No sistema antigo era a "fatura": série + número do pedido, e cada parcela
+ * saía como `0100006462-02`. Aqui o papel é o mesmo, montado a partir do id
+ * da venda — o cliente confere o número do papel com o do sistema.
+ */
+function numeroDaFatura(venda) {
+  const documento = String(venda.numero_venda || "").trim()
+    || String(venda.id || "").replace(/\D/g, "").slice(0, 6).padStart(6, "0");
+  return { documento, numero: `01${documento.padStart(8, "0")}` };
 }
 
 // ------------------------------------------------------------- COMPRA
@@ -338,31 +428,26 @@ function htmlContratoCompra(m) {
 
 // ------------------------------------------------------- prévia + impressão
 
-const ESTILO = `
-  * { box-sizing: border-box; }
-  body { font: 13px/1.5 "Segoe UI", system-ui, Arial, sans-serif; color: #111; margin: 0; padding: 24px; }
-  .doc-topo { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 16px; }
-  .doc-topo h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
-  .doc-sub { margin: 4px 0 0; font-size: 12px; color: #444; }
-  .doc-titulo { font-size: 16px; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 2px; }
-  .doc-data { color: #555; margin: 0 0 8px; font-size: 12px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid #ccc;
-       padding-bottom: 3px; margin: 16px 0 8px; }
-  p { margin: 6px 0; }
-  .doc-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 24px; margin: 4px 0 8px; }
-  .doc-dados > div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dotted #ddd; padding: 3px 0; }
-  .doc-dados dt { color: #555; margin: 0; }
-  .doc-dados dd { margin: 0; font-weight: 600; text-align: right; }
-  .doc-tabela { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
-  .doc-tabela th, .doc-tabela td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; }
-  .doc-tabela .dir { text-align: right; }
-  .doc-tabela tfoot td { font-weight: 700; background: #f3f3f3; }
-  .doc-fecho { margin-top: 16px; }
-  .assinaturas { display: flex; gap: 32px; margin-top: 40px; page-break-inside: avoid; }
-  .assinatura { flex: 1; text-align: center; font-size: 12px; }
-  .linha-assinatura { display: block; border-top: 1px solid #111; margin-bottom: 4px; height: 1px; }
-  @media print { body { padding: 0; } }
-`;
+// O estilo dos documentos mora em `documento.css` — arquivo de verdade, não
+// `<style>` embutido, porque o app roda com `style-src 'self'` e estilo
+// embutido é bloqueado. A prévia e a impressão carregam o mesmo arquivo.
+const FOLHA_DE_ESTILO = "/dono/documento.css";
+
+
+/**
+ * A página inteira do documento — é ela que vai pra impressora **e** pra
+ * prévia na tela.
+ *
+ * As duas usando a mesma função é o que garante que o que o dono vê é o que
+ * sai no papel. Antes a prévia era o HTML solto dentro do app, sem o estilo
+ * do documento: a nota promissória aparecia como texto empilhado, sem o
+ * desenho do talão, e só ficava certa depois de mandar imprimir.
+ */
+function paginaDoDocumento(titulo, corpoHtml) {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>${escapar(titulo)}</title>
+    <link rel="stylesheet" href="${FOLHA_DE_ESTILO}"></head><body>${corpoHtml}</body></html>`;
+}
 
 /** Manda o documento pra impressora via um iframe isolado (não mexe no app). */
 function imprimir(titulo, corpoHtml) {
@@ -373,8 +458,7 @@ function imprimir(titulo, corpoHtml) {
 
   const doc = iframe.contentWindow.document;
   doc.open();
-  doc.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-    <title>${escapar(titulo)}</title><style>${ESTILO}</style></head><body>${corpoHtml}</body></html>`);
+  doc.write(paginaDoDocumento(titulo, corpoHtml));
   doc.close();
 
   const win = iframe.contentWindow;
@@ -402,9 +486,20 @@ function abrirDocumento(titulo, corpoHtml) {
         <button class="botao botao--fantasma" data-fechar type="button">Fechar</button>
       </div>
     </div>
-    <div class="folha-previa">${corpoHtml}</div>
+    <iframe class="folha-previa" title="Prévia do documento"></iframe>
   `);
   modal.classList.add("modal--folha");
+
+  // `srcdoc` e não `innerHTML`: dentro do iframe o documento tem o CSS dele e
+  // nada do app vaza pra dentro (nem o contrário).
+  const folha = modal.querySelector(".folha-previa");
+  folha.srcdoc = paginaDoDocumento(titulo, corpoHtml);
+  // Cresce até caber o documento: iframe tem altura fixa por padrão, e um
+  // contrato de 15 parcelas ficava cortado com barra de rolagem dentro.
+  folha.addEventListener("load", () => {
+    const doc = folha.contentDocument;
+    if (doc) folha.style.height = `${doc.documentElement.scrollHeight + 24}px`;
+  });
 
   modal.querySelector("[data-fechar]").addEventListener("click", () => fecharModal(modal));
   modal.querySelector("#imprimir-doc").addEventListener("click", () => imprimir(titulo, corpoHtml));
@@ -423,4 +518,170 @@ export function imprimirComprovanteCompra(moto) {
 }
 export function imprimirContratoCompra(moto) {
   abrirDocumento("Contrato de compra", htmlContratoCompra(moto));
+}
+
+// ---------------------------------------------------------------- extenso
+
+const UNIDADES = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove",
+  "dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+const DEZENAS = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+const CENTENAS = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos",
+  "seiscentos", "setecentos", "oitocentos", "novecentos"];
+
+function ate999(n) {
+  if (n === 100) return "cem";
+  const c = Math.floor(n / 100);
+  const d = Math.floor((n % 100) / 10);
+  const u = n % 10;
+  const partes = [];
+  if (c) partes.push(CENTENAS[c]);
+  if (n % 100 < 20) {
+    if (n % 100) partes.push(UNIDADES[n % 100]);
+  } else {
+    partes.push(DEZENAS[d]);
+    if (u) partes.push(UNIDADES[u]);
+  }
+  return partes.join(" e ");
+}
+
+/**
+ * O valor por extenso, como manda a nota promissória: "OITOCENTOS REAIS".
+ *
+ * A nota promissória é título de crédito — o valor em palavras é o que vale
+ * se divergir do número, então ele não pode ser "aproximadamente".
+ */
+export function porExtenso(centavos) {
+  const total = Math.round(Math.abs(centavos));
+  const reaisInteiros = Math.floor(total / 100);
+  const cents = total % 100;
+  const blocos = [];
+
+  const escala = [
+    [1_000_000_000, "bilhão", "bilhões"],
+    [1_000_000, "milhão", "milhões"],
+    [1_000, "mil", "mil"],
+  ];
+  let resto = reaisInteiros;
+  for (const [valor, singular, plural] of escala) {
+    const quantos = Math.floor(resto / valor);
+    if (quantos) {
+      blocos.push(valor === 1_000 && quantos === 1 ? "mil" : `${ate999(quantos)} ${quantos === 1 ? singular : plural}`);
+      resto %= valor;
+    }
+  }
+  // O "e" antes do último bloco só entra quando ele é menor que cem ou uma
+  // centena redonda: "mil e duzentos", mas "mil duzentos e trinta e quatro".
+  const ultimo = resto ? ate999(resto) : "";
+  let inteiro = blocos.join(" e ");
+  if (ultimo) {
+    inteiro = inteiro
+      ? `${inteiro}${resto < 100 || resto % 100 === 0 ? " e " : " "}${ultimo}`
+      : ultimo;
+  }
+
+  const partes = [];
+  if (reaisInteiros) {
+    partes.push(`${inteiro} ${reaisInteiros === 1 ? "real" : "reais"}`);
+  }
+  if (cents) {
+    partes.push(`${ate999(cents)} ${cents === 1 ? "centavo" : "centavos"}`);
+  }
+  if (!partes.length) return "zero reais";
+  return partes.join(" e ");
+}
+
+// -------------------------------------------------- nota promissória
+
+/**
+ * Uma nota promissória por parcela — o mesmo papel que a loja já imprime.
+ *
+ * É título de crédito, não recibo: quem promete pagar é o **cliente** (o
+ * emitente), e a loja é quem recebe. Por isso o valor vai também por extenso
+ * — se divergir do número, é a palavra que vale.
+ */
+function htmlNotaPromissoria(venda, parcela, fatura) {
+  const loja = dadosLoja();
+  const e = venda.cliente_endereco || {};
+  const endereco = [e.endereco, e.numero].filter(Boolean).join(",");
+  const praca = `${loja.cidade || ""}${loja.uf ? `  -${loja.uf}` : ""}`;
+  // Sem "R$" e sem milhar: é como está impresso no talão.
+  const valor = (parcela.valor_centavos / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  const extenso = porExtenso(parcela.valor_centavos).toUpperCase();
+
+  return `
+    <div class="promissoria">
+      <div class="pr-selo"><span>REPÚBLICA FEDERATIVA DO BRASIL</span></div>
+      <div class="pr-corpo">
+
+        <div class="pr-cabecalho">
+          <div class="pr-numero"><em>Número</em> <span class="pr-caixa-clara">${escapar(fatura.numero)} -${String(parcela.numero).padStart(2, "0")}</span></div>
+          <div class="pr-direita">
+            <div class="pr-par"><em>Vencimento</em><span class="pr-caixa">${escapar(dataBr(parcela.vencimento))}</span></div>
+            <div class="pr-par"><em>Valor</em><span class="pr-caixa pr-valor">${escapar(valor)}</span></div>
+          </div>
+        </div>
+
+        <p class="pr-aos">A(os) ${escapar(porExtensoDataMinuscula(parcela.vencimento))}</p>
+
+        <div class="pr-titulo">
+          <em>pagarei por está única via de</em>
+          <strong>NOTA PROMISSÓRIA</strong>
+          <em>a</em>
+        </div>
+
+        <div class="pr-beneficiario">
+          <div class="pr-pontilhado"><strong>${escapar(loja.nome)}</strong></div>
+          <div class="pr-cnpj"><span class="pr-rot">CNPJ/CPF</span>
+            <span class="pr-pontilhado"><strong>${escapar(loja.documento || "")}</strong></span></div>
+        </div>
+
+        <div class="pr-quantia">
+          <span class="pr-rot pr-rot--duas">OU A SUA ORDEM<br />A QUANTIA DE</span>
+          <span class="pr-extenso">${escapar(extenso)}${"/".repeat(70)}</span>
+        </div>
+        <p class="pr-moeda">EM MOEDA CORRENTE<br />DESTE PAIS</p>
+
+        <div class="pr-rodape">
+          <div class="pr-emitente">
+            <p><em>Pagável em</em> <span class="pr-pontilhado"><strong>${escapar(praca)}</strong></span></p>
+            <p class="pr-dado"><strong>${escapar(venda.cliente_nome)}</strong></p>
+            <p class="pr-rot">EMITENTE</p>
+            <p class="pr-dado"><span class="pr-rot">CNPJ/CPF</span> <strong>${venda.cliente_cpf ? escapar(fmtCpf(venda.cliente_cpf)) : ""}</strong></p>
+            <p class="pr-dado"><strong>${escapar(endereco)}</strong></p>
+            <p class="pr-rot">ENDEREÇO</p>
+          </div>
+          <div class="pr-assinatura">
+            <p class="pr-local">${escapar(loja.cidade || "")} &nbsp;&nbsp; ${escapar(porExtensoDataMinuscula(venda.data_venda))}</p>
+            <p class="pr-linha-assinatura">Assinatura</p>
+          </div>
+        </div>
+
+      </div>
+    </div>`;
+}
+
+/** `22 de setembro de 2026` — minúscula, como sai na promissória. */
+function porExtensoDataMinuscula(valor) {
+  const texto = porExtensoData(valor);
+  return texto ? texto.replace(/ de ([A-ZÇ])/g, (_, l) => ` de ${l.toLowerCase()}`) : "";
+}
+
+export function imprimirNotasPromissorias(venda) {
+  const parcelas = (venda.parcelas || []).filter((p) => !p.pago_em);
+  if (!parcelas.length) {
+    avisarSemParcelas();
+    return;
+  }
+  const fatura = numeroDaFatura(venda);
+  abrirDocumento(
+    "Notas promissórias",
+    parcelas.map((p) => htmlNotaPromissoria(venda, p, fatura)).join(""),
+  );
+}
+
+function avisarSemParcelas() {
+  // Venda à vista ou carnê quitado: não há promessa de pagamento pra emitir.
+  window.alert("Esta venda não tem parcela em aberto pra emitir nota promissória.");
 }

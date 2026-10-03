@@ -10,7 +10,7 @@
 import * as api from "../../comum/api.js";
 import { reais, cpf as formatarCpf, hojeIso, isoLocal } from "../../comum/formato.js";
 import { abrirModal, fecharModal, avisar, guardadoNaFila } from "../ui.js";
-import { imprimirComprovanteVenda, imprimirContratoVenda } from "../comprovantes.js";
+import { imprimirComprovanteVenda, imprimirContratoVenda, imprimirNotasPromissorias } from "../comprovantes.js";
 import * as v from "../validacao.js";
 import { htmlCamposConjuge, ligarConjuge, lerConjuge, regrasConjuge, corpoConjuge } from "../conjuge.js";
 import { htmlCamposEndereco, lerEndereco, regrasEndereco, corpoEndereco } from "../endereco.js";
@@ -82,9 +82,13 @@ export function abrirModalVenda(moto, aoVender) {
 
       <div class="grade-2 secao-seguinte">
         <label class="campo">Vendedor
-          <select name="vendedor_id">
-            <option value="">Carregando…</option>
-          </select>
+          <div class="campo-com-botao">
+            <select name="vendedor_id">
+              <option value="">Carregando…</option>
+            </select>
+            <button type="button" class="botao botao--fantasma botao--estreito"
+              id="novo-vendedor" title="Cadastrar vendedor">+</button>
+          </div>
         </label>
         <label class="campo">Valor da venda (R$)
           <input name="preco" type="number" step="0.01" min="0.01" value="${paraInput(moto.preco_centavos)}" />
@@ -169,6 +173,49 @@ export function abrirModalVenda(moto, aoVender) {
       selectVendedor.innerHTML = '<option value="">— vai como você —</option>';
     }
   })();
+
+  // Vendedor novo na hora, sem sair da venda: pede só o nome. A conta nasce
+  // com chave de acesso (o servidor sempre gera uma), mas aqui ela não é
+  // mostrada — quem entrou pra vender agora só precisa constar na venda e no
+  // contrato. A chave fica pra quando o dono for dar acesso a ele, na aba
+  // Vendedores.
+  modal.querySelector("#novo-vendedor").addEventListener("click", () => {
+    const janela = abrirModal(`
+      <div class="modal-topo"><h3>Cadastrar vendedor</h3></div>
+      <form id="form-novo-vendedor" novalidate>
+        <label class="campo">Nome<input name="nome" autocomplete="off" /></label>
+        <p class="fraco">Só o nome. O acesso dele ao sistema você libera depois,
+          na aba Vendedores.</p>
+        <div class="acoes-modal">
+          <button type="button" class="botao botao--fantasma" id="cancelar-vendedor">Cancelar</button>
+          <button type="submit" class="botao">Cadastrar</button>
+        </div>
+      </form>`);
+    const formNovo = janela.querySelector("#form-novo-vendedor");
+    janela.querySelector("#cancelar-vendedor").addEventListener("click", () => fecharModal(janela));
+    formNovo.elements.nome.focus();
+
+    formNovo.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const nome = formNovo.elements.nome.value;
+      if (!v.validarFormulario(formNovo, [["nome", v.textoPreenchido(nome), "Informe o nome"]])) return;
+      try {
+        const criado = await api.enviar("POST", "/usuarios", { nome: nome.trim() },
+          { rotulo: `Vendedor ${nome.trim()}` });
+        // Entra na lista já escolhido: quem acabou de cadastrar é quem está
+        // vendendo agora.
+        const opcao = document.createElement("option");
+        opcao.value = criado.usuario_id;
+        opcao.textContent = criado.nome;
+        selectVendedor.appendChild(opcao);
+        selectVendedor.value = String(criado.usuario_id);
+        fecharModal(janela);
+        avisar(`${criado.nome} cadastrado`);
+      } catch (erro) {
+        v.mostrarErroDeApi(formNovo, erro, { porPalavra: [["nome", "nome"]] });
+      }
+    });
+  });
 
   // ------------------------------------------------------------- cliente
 
@@ -479,10 +526,12 @@ export function abrirModalVenda(moto, aoVender) {
       <div class="acoes-modal acoes-empilhadas">
         <button class="botao" id="doc-comprovante-venda" type="button">Imprimir comprovante</button>
         <button class="botao" id="doc-contrato-venda" type="button">Imprimir contrato</button>
+        <button class="botao" id="doc-promissorias" type="button">Imprimir notas promissórias</button>
         <button class="botao botao--fantasma" id="concluir-venda" type="button">Concluir</button>
       </div>`;
     modal.querySelector("#doc-comprovante-venda").addEventListener("click", () => imprimirComprovanteVenda(venda));
     modal.querySelector("#doc-contrato-venda").addEventListener("click", () => imprimirContratoVenda(venda));
+    modal.querySelector("#doc-promissorias").addEventListener("click", () => imprimirNotasPromissorias(venda));
     modal.querySelector("#concluir-venda").addEventListener("click", async () => {
       fecharModal(modal);
       await aoConcluir();

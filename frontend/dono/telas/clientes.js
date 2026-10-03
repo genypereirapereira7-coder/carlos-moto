@@ -11,8 +11,7 @@ import * as api from "../../comum/api.js";
 import { reais, dataBr, cpf as formatarCpf, telefone as formatarTelefone } from "../../comum/formato.js";
 import {
   abrirModal, fecharModal, avisar, mensagemDeErro, guardadoNaFila,
-  rotuloStatusParcela, classeStatusParcela, classeDoSaldo,
-} from "../ui.js";
+  rotuloStatusParcela, classeStatusParcela, classeDoSaldo, aoTopo } from "../ui.js";
 import * as v from "../validacao.js";
 import { htmlCamposConjuge, ligarConjuge, lerConjuge, regrasConjuge, corpoConjuge } from "../conjuge.js";
 import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
@@ -202,6 +201,14 @@ export async function renderClientes(raiz) {
     // ser feito aqui — e o re-render lê este id pra reabrir o cadastro
     // certo. Se ele fosse marcado só depois da resposta, o re-render
     // chegaria primeiro e reabriria o cliente anterior por cima deste.
+    // Abrir um registro **diferente** leva a tela de volta pro topo, que é
+    // onde o detalhe é desenhado: sem isso, quem rolou a lista até o fim e
+    // tocou numa linha ficava olhando o mesmo pedaço de lista, achando que o
+    // toque não funcionou. Só quando MUDA — a tela se refaz sozinha a cada
+    // aviso do servidor, e subir nessas horas tiraria da vista o que o dono
+    // está lendo naquele instante.
+    if (clienteAbertoId !== Number(clienteId)) aoTopo();
+
     const meuPedido = ++pedidoDetalhe;
     clienteAbertoId = Number(clienteId);
     detalheEl().innerHTML = '<div class="cartao fraco">Carregando cadastro…</div>';
@@ -506,7 +513,8 @@ export async function renderClientes(raiz) {
   });
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");
-    if (linha) abrirDetalhe(linha.dataset.id);
+    if (!linha) return;
+    abrirDetalhe(linha.dataset.id);
   });
 
   pintarFiltro();

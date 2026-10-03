@@ -14,8 +14,7 @@ import {
 } from "../../comum/formato.js";
 import {
   abrirModal, fecharModal, avisar, mensagemDeErro, escapar, guardadoNaFila,
-  rotuloFormaPagamento, rotuloStatusParcela, classeStatusParcela, classeDoSaldo,
-} from "../ui.js";
+  rotuloFormaPagamento, rotuloStatusParcela, classeStatusParcela, classeDoSaldo, aoTopo } from "../ui.js";
 import * as v from "../validacao.js";
 
 // Sobrevivem a um `renderParcelas` novo: o `app.js` refaz a tela a cada
@@ -212,6 +211,14 @@ export async function renderParcelas(raiz) {
 
   async function abrirDetalhe(clienteId) {
     // Antes do await — ver `abrirDetalhe` em `telas/clientes.js`.
+    // Abrir um registro **diferente** leva a tela de volta pro topo, que é
+    // onde o detalhe é desenhado: sem isso, quem rolou a lista até o fim e
+    // tocou numa linha ficava olhando o mesmo pedaço de lista, achando que o
+    // toque não funcionou. Só quando MUDA — a tela se refaz sozinha a cada
+    // aviso do servidor, e subir nessas horas tiraria da vista o que o dono
+    // está lendo naquele instante.
+    if (clienteAbertoId !== Number(clienteId)) aoTopo();
+
     const meuPedido = ++pedidoDetalhe;
     clienteAbertoId = Number(clienteId);
     detalheEl().innerHTML = '<div class="cartao fraco">Carregando parcelas…</div>';
@@ -510,7 +517,8 @@ export async function renderParcelas(raiz) {
   });
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");
-    if (linha) abrirDetalhe(linha.dataset.id);
+    if (!linha) return;
+    abrirDetalhe(linha.dataset.id);
   });
   // Um ouvinte só, no contêiner, ligado uma vez por desenho da tela: o
   // conteúdo do detalhe é trocado a cada cliente aberto, e ligar botão por

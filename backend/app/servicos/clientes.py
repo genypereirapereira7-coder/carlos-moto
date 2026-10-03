@@ -74,6 +74,7 @@ async def _saldo_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict[int, 
     consulta = (
         select(Venda.cliente_id, func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Parcela, Parcela.venda_id == Venda.id)
+        .where(Venda.cancelada_em.is_(None))
         .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(Parcela.pago_em.is_(None), Venda.cliente_id.in_(ids))
         .group_by(Venda.cliente_id)
@@ -87,6 +88,7 @@ async def _saldo_atrasado_por_cliente(sessao: AsyncSession, ids: list[int]) -> d
     consulta = (
         select(Venda.cliente_id, func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Parcela, Parcela.venda_id == Venda.id)
+        .where(Venda.cancelada_em.is_(None))
         .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(
             Parcela.pago_em.is_(None),
@@ -102,7 +104,7 @@ async def _qtd_comprou_por_cliente(sessao: AsyncSession, ids: list[int]) -> dict
     """Quantas motos cada cliente comprou **da** loja."""
     consulta = (
         select(Venda.cliente_id, func.count(Venda.id))
-        .where(Venda.cliente_id.in_(ids))
+        .where(Venda.cliente_id.in_(ids), Venda.cancelada_em.is_(None))
         .group_by(Venda.cliente_id)
     )
     return {cid: int(qtd) for cid, qtd in (await sessao.execute(consulta)).all()}
@@ -144,7 +146,7 @@ def _filtro_de_relacao(filtro: str | None):
     trezentos. `EXISTS` porque a pergunta é "tem alguma?", não "quantas?".
     """
     if filtro == "comprou":
-        return exists().where(Venda.cliente_id == Cliente.id)
+        return exists().where(Venda.cliente_id == Cliente.id, Venda.cancelada_em.is_(None))
     if filtro == "vendeu":
         return exists().where(Moto.fornecedor_cliente_id == Cliente.id)
     return None
@@ -209,6 +211,7 @@ async def saldo_devedor(sessao: AsyncSession, cliente_id: int) -> int:
     consulta = (
         select(func.coalesce(func.sum(saldo_da_parcela(pago)), 0))
         .join(Venda, Venda.id == Parcela.venda_id)
+        .where(Venda.cancelada_em.is_(None))
         .outerjoin(pago, pago.c.parcela_id == Parcela.id)
         .where(Venda.cliente_id == cliente_id, Parcela.pago_em.is_(None))
     )

@@ -110,7 +110,12 @@ async def _carregar(sessao: AsyncSession, primeiro: date, ultimo: date) -> _Peri
             selectinload(Venda.cliente),
             selectinload(Venda.moto).selectinload(Moto.despesas),
         )
-        .where(Venda.data_venda >= inicio, Venda.data_venda < fim)
+        .where(
+            Venda.data_venda >= inicio,
+            Venda.data_venda < fim,
+            # Venda desfeita não entrou no caixa e não é lucro.
+            Venda.cancelada_em.is_(None),
+        )
     )
     # Cada pagamento em pedaço entra no caixa pelo próprio dia e valor — por
     # isso a consulta é dos pagamentos, não das parcelas. Uma parcela paga de

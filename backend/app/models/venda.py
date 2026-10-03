@@ -4,7 +4,17 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, agora
@@ -55,10 +65,12 @@ class Venda(Base):
     id_cliente: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, unique=True)
 
     # A trava de verdade contra vender a mesma moto duas vezes pra clientes
-    # diferentes: nenhuma moto pode aparecer em mais de uma Venda, ponto — o
-    # banco recusa a segunda linha independente de qualquer lock que o código
-    # tenha esquecido de tomar. Ver `servicos/vendas.py`.
-    moto_id: Mapped[int] = mapped_column(ForeignKey("moto.id"), nullable=False, unique=True)
+    # diferentes. Era `unique=True` na coluna; virou índice parcial (lá
+    # embaixo, em `__table_args__`) porque a moto **pode** voltar pro estoque:
+    # o cliente desiste, a loja retoma, e ela é vendida de novo. O que não
+    # pode é ter duas vendas **ativas** da mesma moto — e disso quem continua
+    # cuidando é o banco, não o código. Ver `servicos/vendas.py`.
+    moto_id: Mapped[int] = mapped_column(ForeignKey("moto.id"), nullable=False, index=True)
 
     vendedor_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False, index=True)
     cliente_id: Mapped[int] = mapped_column(ForeignKey("cliente.id"), nullable=False, index=True)
@@ -91,6 +103,11 @@ class Venda(Base):
     # O índice vem do `Index` nomeado em `__table_args__` logo abaixo, não de
     # `index=True` aqui — as duas formas geram o mesmo nome pela convenção em
     # `models/base.py`, e o `create_all` recusa criar o mesmo índice duas vezes.
+    # Venda desfeita: a moto voltou pro estoque. Não some nada — a venda, o
+    # carnê e o histórico continuam gravados, só param de contar como dívida
+    # e deixam a moto livre pra ser vendida de novo.
+    cancelada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     data_venda: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=agora
     )
@@ -98,7 +115,7 @@ class Venda(Base):
         DateTime(timezone=True), nullable=False, default=agora
     )
 
-    moto: Mapped["Moto"] = relationship(back_populates="venda", lazy="selectin")
+    moto: Mapped["Moto"] = relationship(back_populates="vendas", lazy="selectin")
     vendedor: Mapped["Usuario"] = relationship(foreign_keys=[vendedor_id], lazy="selectin")
     cliente: Mapped["Cliente"] = relationship(back_populates="vendas", lazy="selectin")
     # Sem `delete-orphan`: o sistema não apaga nada (ver `app/historico.py`),
@@ -117,6 +134,16 @@ class Venda(Base):
     __table_args__ = (
         CheckConstraint("preco_venda_centavos >= 0", name="preco_venda_nao_negativo"),
         Index("ix_venda_data_venda", "data_venda"),
+        # Uma venda ATIVA por moto. O índice é parcial: venda desfeita sai da
+        # conta, e só por isso a moto pode ser vendida de novo. SQLite e
+        # Postgres aceitam os dois o `WHERE`.
+        Index(
+            "ix_venda_moto_ativa",
+            "moto_id",
+            unique=True,
+            sqlite_where=text("cancelada_em IS NULL"),
+            postgresql_where=text("cancelada_em IS NULL"),
+        ),
     )
 
     @property

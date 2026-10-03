@@ -10,7 +10,7 @@
  * antigo e evita o PWA congelado numa versão antiga.
  */
 
-const VERSAO = "v58";
+const VERSAO = "v61";
 const CACHE = `carlosmoto-dono-${VERSAO}`;
 
 const CASCA = [
@@ -30,6 +30,7 @@ const CASCA = [
   "./endereco.js",
   "./documentos.js",
   "./dono.css",
+  "./documento.css",
   "./manifest.json",
   "./icones/icone-192.png",
   "./icones/icone-512.png",

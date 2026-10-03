@@ -116,7 +116,27 @@ class Moto(Base):
         DateTime(timezone=True), nullable=False, default=agora, onupdate=agora
     )
 
-    venda: Mapped["Venda | None"] = relationship(back_populates="moto", lazy="selectin")
+    # A venda ATIVA desta moto — não "a venda dela pra sempre". Uma moto
+    # devolvida pro estoque e vendida de novo tem duas vendas na tabela, e só
+    # a nova vale; a antiga fica no histórico com `cancelada_em` preenchido.
+    #
+    # `viewonly`: quem liga moto e venda é o lado da `Venda`. Sem isso, criar
+    # a segunda venda fazia o SQLAlchemy "soltar" a primeira do relacionamento
+    # um-pra-um e gravar `moto_id = NULL` nela — apagando em silêncio a venda
+    # antiga do histórico.
+    venda: Mapped["Venda | None"] = relationship(
+        primaryjoin=(
+            "and_(Moto.id == foreign(Venda.moto_id), Venda.cancelada_em.is_(None))"
+        ),
+        uselist=False,
+        viewonly=True,
+        lazy="selectin",
+    )
+
+    # Todas as vendas que esta moto já teve, a ativa e as desfeitas.
+    vendas: Mapped[list["Venda"]] = relationship(
+        back_populates="moto", lazy="selectin", order_by="Venda.data_venda"
+    )
     fornecedor: Mapped["Cliente | None"] = relationship(lazy="selectin")
     # Sem `delete-orphan`, pelo mesmo motivo das parcelas em `venda.py`: os
     # gastos de uma moto não podem sumir junto com ela.

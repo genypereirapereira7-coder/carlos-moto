@@ -106,6 +106,32 @@ async def aplicar(engine: AsyncEngine) -> list[str]:
                 await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
                 feitas.append(f"cliente.{coluna} (e-mail e endereço)")
 
+        # Venda desfeita (a moto volta pro estoque). Junto, o `unique` da
+        # coluna `moto_id` vira índice parcial: uma venda ATIVA por moto, pra
+        # a moto devolvida poder ser vendida de novo. No SQLite não dá pra
+        # largar um `unique` de coluna sem recriar a tabela — e recriar tabela
+        # com dado de loja dentro não se faz por atalho. O índice parcial é
+        # criado de todo jeito; o `unique` antigo some no dia em que a tabela
+        # for recriada por outro motivo.
+        colunas_venda_cancel = await _colunas(conexao, "venda")
+        if "cancelada_em" not in colunas_venda_cancel:
+            await conexao.execute(
+                text("ALTER TABLE venda ADD COLUMN cancelada_em TIMESTAMP")
+            )
+            feitas.append("venda.cancelada_em (devolver a moto pro estoque)")
+        await conexao.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_venda_moto_ativa "
+            "ON venda (moto_id) WHERE cancelada_em IS NULL"
+        ))
+        if conexao.dialect.name == "postgresql":
+            # No Postgres dá pra tirar o `UNIQUE` antigo da coluna. Sem isso a
+            # moto devolvida pro estoque não podia ser vendida de novo em
+            # produção — o banco recusava a segunda venda, mesmo com a
+            # primeira desfeita. `IF EXISTS`: em banco novo ele nunca existiu.
+            await conexao.execute(
+                text("ALTER TABLE venda DROP CONSTRAINT IF EXISTS uq_venda_moto_id")
+            )
+
         # Entrada e juros da venda. `DEFAULT 0` porque a coluna é NOT NULL e as
         # vendas que já existem não tinham juros nenhum — zero é a verdade delas.
         colunas_venda = await _colunas(conexao, "venda")

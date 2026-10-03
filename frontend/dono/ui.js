@@ -25,9 +25,9 @@ export function abrirModal(innerHTML) {
   sobreposicao.className = "sobreposicao";
   sobreposicao.innerHTML = `<div class="modal cartao">${innerHTML}</div>`;
 
-  sobreposicao.addEventListener("click", (evento) => {
-    if (evento.target === sobreposicao) sobreposicao.remove();
-  });
+  // Clicar fora NÃO fecha, de propósito: é formulário de cadastro, e o toque
+  // errado no celular apagava tudo o que já tinha sido digitado. Só sai pelo
+  // botão Cancelar (ou quando o salvar dá certo).
 
   document.body.appendChild(sobreposicao);
   return sobreposicao.querySelector(".modal");
@@ -93,4 +93,20 @@ export function guardadoNaFila(erro, oQue) {
   if (!(erro instanceof ErroNaFila)) return false;
   avisar(`${oQue} — guardado, sobe quando a internet voltar`, "ok");
   return true;
+}
+
+/**
+ * Leva a tela de volta pro começo, onde o detalhe é desenhado.
+ *
+ * Sem isso, quem rolou a lista até o fim e tocou numa linha ficava olhando o
+ * mesmo pedaço de lista: o cadastro abria lá em cima, fora da vista, e parecia
+ * que o toque não tinha feito nada. `instant` de propósito — rolagem suave
+ * daqui de baixo demora e o dono toca de novo achando que falhou.
+ *
+ * No celular quem rola é o documento; no computador, o `body`.
+ */
+export function aoTopo() {
+  window.scrollTo({ top: 0, behavior: "instant" });
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
 }

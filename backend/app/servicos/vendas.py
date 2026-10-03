@@ -216,3 +216,33 @@ async def listar(
     if vendedor_id is not None:
         consulta = consulta.where(Venda.vendedor_id == vendedor_id)
     return list((await sessao.execute(consulta)).scalars())
+
+
+class MotoNaoVendida(Exception):
+    """A moto não está vendida — não há o que desfazer."""
+
+
+async def devolver_ao_estoque(sessao: AsyncSession, moto: Moto) -> Venda:
+    """Desfaz a venda: a moto volta pro estoque e pode ser vendida de novo.
+
+    **Nada é apagado.** A venda, o carnê e os pagamentos continuam gravados,
+    marcados com a data em que foram desfeitos — some só a dívida: o cliente
+    deixa de dever as parcelas, e o financeiro deixa de contar aquela venda.
+    É o caso do cliente que desiste e devolve a moto, e da venda lançada na
+    moto errada.
+
+    O que já foi pago **não** é estornado aqui: dinheiro que entrou e volta
+    pro cliente é decisão do dono, no caixa, não efeito colateral de um botão.
+    """
+    venda = (
+        await sessao.execute(
+            select(Venda).where(Venda.moto_id == moto.id, Venda.cancelada_em.is_(None))
+        )
+    ).scalars().first()
+    if venda is None or moto.status != StatusMoto.VENDIDA:
+        raise MotoNaoVendida()
+
+    venda.cancelada_em = agora()
+    moto.status = StatusMoto.DISPONIVEL
+    await sessao.flush()
+    return venda

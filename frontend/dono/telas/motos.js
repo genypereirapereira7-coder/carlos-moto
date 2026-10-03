@@ -8,15 +8,14 @@ import * as api from "../../comum/api.js";
 import { reais, dataBr, hojeIso, km as formatarKm } from "../../comum/formato.js";
 import {
   abrirModal, fecharModal, avisar, mensagemDeErro, guardadoNaFila,
-  rotuloStatusParcela, classeStatusParcela, classeDoSaldo,
-} from "../ui.js";
+  rotuloStatusParcela, classeStatusParcela, classeDoSaldo, aoTopo } from "../ui.js";
 import * as v from "../validacao.js";
 import { htmlCampoModelo, ligarAutocompleteModelo } from "../marca-modelo.js";
 import { abrirModalVenda } from "./vender.js";
 import { htmlCampoObservacao, lerObservacao, regrasObservacao } from "../observacao.js";
 import {
   imprimirComprovanteCompra, imprimirContratoCompra,
-  imprimirComprovanteVenda, imprimirContratoVenda,
+  imprimirComprovanteVenda, imprimirContratoVenda, imprimirNotasPromissorias,
 } from "../comprovantes.js";
 
 function escapar(valor) {
@@ -185,6 +184,14 @@ export async function renderMotos(raiz) {
     // se ele só fosse escrito depois da resposta, o eco da própria ação
     // reabriria a moto anterior por cima desta. Na busca por placa não dá
     // pra adiantar — o id só chega junto com a moto.
+    // Abrir um registro **diferente** leva a tela de volta pro topo, que é
+    // onde o detalhe é desenhado: sem isso, quem rolou a lista até o fim e
+    // tocou numa linha ficava olhando o mesmo pedaço de lista, achando que o
+    // toque não funcionou. Só quando MUDA — a tela se refaz sozinha a cada
+    // aviso do servidor, e subir nessas horas tiraria da vista o que o dono
+    // está lendo naquele instante.
+    if (!porPlaca && motoAbertaId !== Number(idOuPlaca)) aoTopo();
+
     const meuPedido = ++pedidoDetalhe;
     if (!porPlaca) motoAbertaId = Number(idOuPlaca);
     detalheEl().innerHTML = '<div class="cartao fraco">Carregando histórico…</div>';
@@ -247,6 +254,7 @@ export async function renderMotos(raiz) {
           <div class="acoes-linha">
             ${m.status === "DISPONIVEL" ? '<button class="botao" id="botao-vender-moto" type="button">Vender</button>' : ""}
             ${m.status === "DISPONIVEL" ? '<button class="botao botao--perigo" id="botao-excluir-moto" type="button">Excluir</button>' : ""}
+            ${m.status === "VENDIDA" ? '<button class="botao botao--fantasma" id="botao-devolver-estoque" type="button">Voltar pro estoque</button>' : ""}
             <button class="botao botao--fantasma" id="botao-editar-moto" type="button">Editar</button>
             <button class="botao botao--fantasma" id="botao-lancar-despesa" type="button">Lançar gasto</button>
             <button class="botao botao--fantasma" id="botao-fechar-moto" type="button">Fechar</button>
@@ -284,6 +292,7 @@ export async function renderMotos(raiz) {
           <div class="acoes-linha">
             <button class="botao botao--fantasma" id="doc-comprovante-venda" type="button">Comprovante de venda</button>
             <button class="botao botao--fantasma" id="doc-contrato-venda" type="button">Contrato de venda</button>
+            <button class="botao botao--fantasma" id="doc-promissorias" type="button">Notas promissórias</button>
           </div>` : ""}
 
         ${m.lucro_centavos != null ? `
@@ -334,6 +343,31 @@ export async function renderMotos(raiz) {
       }
     });
 
+    // Cliente desistiu e devolveu a moto, ou a venda foi lançada na moto
+    // errada. Desfaz a venda sem apagar nada: ela e o carnê ficam no
+    // histórico, a dívida some e a moto volta a poder ser vendida.
+    raiz.querySelector("#botao-devolver-estoque")?.addEventListener("click", async (evento) => {
+      const nome = `${moto.marca} ${moto.modelo}${moto.placa ? ` — ${moto.placa}` : ""}`;
+      const comprador = moto.venda?.cliente_nome ? ` de ${moto.venda.cliente_nome}` : "";
+      if (!window.confirm(
+        `Desfazer a venda${comprador} e colocar a ${nome} de volta no estoque?\n\n`
+        + "A venda e o carnê continuam no histórico; o cliente deixa de dever as parcelas. "
+        + "O que ele já pagou não é devolvido aqui — isso é no caixa."
+      )) return;
+      const botao = evento.target;
+      botao.disabled = true;
+      try {
+        await api.enviar("POST", `/motos/${moto.id}/devolver-ao-estoque`, null,
+          { rotulo: `Voltar ${nome} pro estoque` });
+        avisar("Moto de volta no estoque");
+        await carregarLista();
+        await abrirDetalhe(moto.id);
+      } catch (erro) {
+        avisar(mensagemDeErro(erro), "erro");
+        botao.disabled = false;
+      }
+    });
+
     // Documentos de compra — montados direto da moto (fornecedor, valor, data).
     raiz.querySelector("#doc-comprovante-compra")?.addEventListener("click", () => imprimirComprovanteCompra(moto));
     raiz.querySelector("#doc-contrato-compra")?.addEventListener("click", () => imprimirContratoCompra(moto));
@@ -356,6 +390,7 @@ export async function renderMotos(raiz) {
     }
     raiz.querySelector("#doc-comprovante-venda")?.addEventListener("click", (e) => imprimirVenda(imprimirComprovanteVenda, e.currentTarget));
     raiz.querySelector("#doc-contrato-venda")?.addEventListener("click", (e) => imprimirVenda(imprimirContratoVenda, e.currentTarget));
+    raiz.querySelector("#doc-promissorias")?.addEventListener("click", (e) => imprimirVenda(imprimirNotasPromissorias, e.currentTarget));
   }
 
   function abrirModalEditar(moto) {
@@ -708,12 +743,19 @@ export async function renderMotos(raiz) {
   });
   corpoTabela().addEventListener("click", (evento) => {
     const linha = evento.target.closest("tr[data-id]");
-    if (linha) abrirDetalhe(linha.dataset.id);
+    if (!linha) return;
+    abrirDetalhe(linha.dataset.id);
   });
 
   raiz.querySelectorAll("#filtro-motos .aba-filtro").forEach((botao) => {
     botao.addEventListener("click", () => {
       filtroMotos = botao.dataset.filtro;
+      // Fecha o detalhe aberto: a moto que estava na tela pode nem estar na
+      // lista nova (é o caso de abrir uma vendida e trocar pra Disponíveis),
+      // e deixá-la ali em cima faz parecer que ela continua no filtro.
+      motoAbertaId = null;
+      detalheEl().innerHTML = "";
+      aoTopo();
       carregarLista();
     });
   });
