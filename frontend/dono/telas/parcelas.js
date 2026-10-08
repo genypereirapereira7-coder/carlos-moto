@@ -289,8 +289,13 @@ export async function renderParcelas(raiz) {
               : parcial
                 ? `falta ${reais(p.saldo_centavos)} <span class="fraco">· já pagou ${reais(pago)}</span>`
                 : `${reais(p.valor_centavos)} · ${rotuloStatusParcela(p.status)}`;
+            // Parcela paga tem duas correções possíveis, e são coisas
+            // diferentes: **estornar** é "não recebi isso" (volta a dever);
+            // **corrigir a data** é "recebi, mas em outro dia" (o dinheiro
+            // muda de dia no caixa e a dívida continua paga).
             const acoes = p.status === "PAGA"
-              ? `<button class="link" data-desfazer="${p.id}" type="button">desfazer</button>`
+              ? `<button class="link" data-data="${p.id}" type="button">corrigir data</button>
+                 <button class="link link--perigo" data-desfazer="${p.id}" type="button">estornar</button>`
               : `<button class="botao botao--pequeno" data-receber="${p.id}" type="button">Receber</button>
                  <button class="link" data-um-pouco="${p.id}" type="button">um pouco</button>`;
             return `
@@ -463,6 +468,58 @@ export async function renderParcelas(raiz) {
     });
   }
 
+  /**
+   * Corrige o dia em que o recebimento entrou no caixa.
+   *
+   * Pro que recebeu no sábado e só lançou na segunda. Diferente de estornar:
+   * aqui o cliente pagou mesmo — o que estava errado era a data, e é ela que
+   * decide em que dia o dinheiro aparece no financeiro.
+   */
+  function abrirModalData(parcelaId) {
+    const achado = acharParcela(parcelaId);
+    if (!achado) return;
+    const { parcela, venda } = achado;
+    const diaDaVenda = String(venda.data_venda).slice(0, 10);
+
+    const modal = abrirModal(`
+      <div class="modal-topo"><h3>Corrigir a data do pagamento</h3></div>
+      <p>Parcela ${parcela.numero} · ${reais(parcela.valor_centavos)} ·
+        hoje consta como paga em <strong>${dataBr(parcela.pago_em)}</strong>.</p>
+      <form id="form-data" novalidate>
+        <label class="campo">Pagou mesmo no dia
+          <input name="data_pagamento" type="date" min="${diaDaVenda}" max="${hojeIso()}"
+            value="${String(parcela.pago_em).slice(0, 10)}" />
+        </label>
+        <p class="fraco">O dinheiro sai do caixa do dia antigo e entra no caixa deste
+          dia. A parcela continua paga.</p>
+        <div class="acoes-modal">
+          <button type="button" class="botao botao--fantasma" id="cancelar-data">Cancelar</button>
+          <button type="submit" class="botao">Corrigir</button>
+        </div>
+      </form>`);
+
+    const form = modal.querySelector("#form-data");
+    modal.querySelector("#cancelar-data").addEventListener("click", () => fecharModal(modal));
+    form.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const dia = form.elements.data_pagamento.value;
+      if (!v.validarFormulario(form, [
+        ["data_pagamento", v.textoPreenchido(dia), "Escolha o dia"],
+        ["data_pagamento", v.dataNaoFutura(dia), "O pagamento não pode ser no futuro"],
+      ])) return;
+      try {
+        await api.enviar("PATCH", `/parcelas/${parcela.id}/data-pagamento`,
+          { data_pagamento: dia },
+          { rotulo: `Data do pagamento da parcela ${parcela.numero}` });
+        fecharModal(modal);
+        avisar("Data corrigida");
+        await atualizarTudo();
+      } catch (erro) {
+        v.mostrarErroDeApi(form, erro, { porPalavra: [["data", "data_pagamento"]] });
+      }
+    });
+  }
+
   function abrirModalDesfazer(parcelaId) {
     const achado = acharParcela(parcelaId);
     if (!achado) return;
@@ -534,6 +591,8 @@ export async function renderParcelas(raiz) {
     if (receber) return abrirModalReceber(receber.dataset.receber);
     const umPouco = evento.target.closest("[data-um-pouco]");
     if (umPouco) return abrirModalPagarUmPouco(umPouco.dataset["umPouco"]);
+    const corrigirData = evento.target.closest("[data-data]");
+    if (corrigirData) return abrirModalData(corrigirData.dataset.data);
     const desfazer = evento.target.closest("[data-desfazer]");
     if (desfazer) abrirModalDesfazer(desfazer.dataset.desfazer);
   });

@@ -1723,3 +1723,66 @@ table.tabela tr.detalhe-dia td {
   font-size: 20px;
   line-height: 1;
 }
+
+/* ------------------------------------------------------------------ caixa */
+
+/* Os três números do fechamento do dia, lado a lado. No celular viram um
+   embaixo do outro — "deve ter na gaveta" espremido em três colunas de 110px
+   não se lê, e é justo o número que o dono vai conferir com o dinheiro. */
+.caixa-totais {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.caixa-totais p { margin: 0; }
+.caixa-totais > div { min-width: 0; }
+
+.valor-positivo { color: var(--verde); font-weight: 700; }
+.valor-negativo { color: var(--vermelho); font-weight: 700; }
+.valor-forte { font-size: 22px; font-weight: 800; }
+
+.lista-caixa {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--linha);
+}
+
+.lista-caixa li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--linha);
+  font-size: 14px;
+}
+
+/* A descrição é quem cede espaço: ela pode ser longa, os valores não. */
+.caixa-descricao {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caixa-origem { font-size: 12px; }
+
+@media (max-width: 720px) {
+  .caixa-totais { grid-template-columns: 1fr; gap: 6px; }
+  .caixa-totais > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .valor-forte { font-size: 20px; }
+  .lista-caixa li { flex-wrap: wrap; }
+  .caixa-descricao { flex-basis: 100%; white-space: normal; }
+}
+
+/* Ação de texto que desfaz algo: mesma forma do `.link`, cor de alerta —
+   "estornar" fica do lado de "corrigir data" e os dois não podem parecer a
+   mesma coisa. */
+.link--perigo { color: var(--vermelho); }

@@ -31,6 +31,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.base import FUSO_DA_LOJA, como_utc
 from app.models.despesa import DespesaMoto
+from app.models.caixa import MovimentoCaixa, TipoCaixa
 from app.models.moto import Moto
 from app.models.pagamento_parcela import PagamentoParcela
 from app.models.parcela import Parcela
@@ -48,8 +49,10 @@ from app.schemas.financeiro import (
 _ORDEM = {
     TipoMovimento.VENDA: 0,
     TipoMovimento.PARCELA: 1,
-    TipoMovimento.COMPRA: 2,
-    TipoMovimento.GASTO: 3,
+    TipoMovimento.ENTRADA_CAIXA: 2,
+    TipoMovimento.COMPRA: 3,
+    TipoMovimento.GASTO: 4,
+    TipoMovimento.SAIDA_CAIXA: 5,
 }
 
 _FORMA = {
@@ -68,6 +71,7 @@ class _Periodo:
     pagamentos: list[PagamentoParcela]
     compras: list[Moto]
     gastos: list[DespesaMoto]
+    caixa: list[MovimentoCaixa]
 
 
 def _limites_do_mes(ano: int, mes: int) -> tuple[date, date]:
@@ -145,11 +149,22 @@ async def _carregar(sessao: AsyncSession, primeiro: date, ultimo: date) -> _Peri
         .options(selectinload(DespesaMoto.moto))
         .where(DespesaMoto.data >= primeiro, DespesaMoto.data <= ultimo)
     )
+    # Entradas e saídas lançadas à mão. Estornadas ficam de fora: continuam
+    # no histórico do caixa, mas não contam no fechamento.
+    caixa = await sessao.execute(
+        select(MovimentoCaixa).where(
+            MovimentoCaixa.ocorrido_em >= inicio,
+            MovimentoCaixa.ocorrido_em < fim,
+            MovimentoCaixa.estornado_em.is_(None),
+        )
+    )
+
     return _Periodo(
         vendas=list(vendas.scalars()),
         pagamentos=list(pagamentos.scalars()),
         compras=list(compras.scalars()),
         gastos=list(gastos.scalars()),
+        caixa=list(caixa.scalars()),
     )
 
 
@@ -222,6 +237,17 @@ def _movimentos(periodo: _Periodo) -> list[Movimento]:
             saida_centavos=gasto.valor_centavos,
         ))
 
+    for movimento in periodo.caixa:
+        entrada = movimento.tipo is TipoCaixa.ENTRADA
+        lista.append(Movimento(
+            dia=_dia_da_loja(movimento.ocorrido_em),
+            tipo=TipoMovimento.ENTRADA_CAIXA if entrada else TipoMovimento.SAIDA_CAIXA,
+            descricao=movimento.descricao,
+            entrada_centavos=movimento.valor_centavos if entrada else 0,
+            saida_centavos=0 if entrada else movimento.valor_centavos,
+            origem_id=movimento.id,
+        ))
+
     lista.sort(key=lambda m: (m.dia, _ORDEM[m.tipo]))
     return lista
 
@@ -286,6 +312,15 @@ async def do_mes(sessao: AsyncSession, ano: int, mes: int) -> FinanceiroMes:
     entrou = sum(m.entrada_centavos for m in movimentos)
     compras = sum(m.saida_centavos for m in movimentos if m.tipo == TipoMovimento.COMPRA)
     arrumacao = sum(m.saida_centavos for m in movimentos if m.tipo == TipoMovimento.GASTO)
+    # Saída lançada à mão (aluguel, retirada) sai do caixa como qualquer
+    # outra. Sem entrar nesta conta, o lucro do mês ficaria maior do que o
+    # dinheiro que sobrou de verdade — justo o erro que o dono não perdoa.
+    saidas_caixa = sum(
+        m.saida_centavos for m in movimentos if m.tipo == TipoMovimento.SAIDA_CAIXA
+    )
+    entradas_caixa = sum(
+        m.entrada_centavos for m in movimentos if m.tipo == TipoMovimento.ENTRADA_CAIXA
+    )
     lucro_vendas, sem_custo = _lucro_nas_vendas(periodo.vendas)
 
     return FinanceiroMes(
@@ -295,7 +330,9 @@ async def do_mes(sessao: AsyncSession, ano: int, mes: int) -> FinanceiroMes:
         gasto_compra_motos_centavos=compras,
         gasto_arrumacao_centavos=arrumacao,
         a_receber_centavos=await _a_receber(sessao),
-        lucro_centavos=entrou - compras - arrumacao,
+        entradas_caixa_centavos=entradas_caixa,
+        saidas_caixa_centavos=saidas_caixa,
+        lucro_centavos=entrou - compras - arrumacao - saidas_caixa,
         qtd_vendas=len(periodo.vendas),
         qtd_motos_compradas=len(periodo.compras),
         # Conta os recebimentos (pagamentos positivos) do período — estorno não

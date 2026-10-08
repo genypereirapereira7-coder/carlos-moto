@@ -154,3 +154,40 @@ async def marcar(
     parcela.pago_em = momento
     await sessao.flush()
     return parcela
+
+
+class ParcelaNaoPaga(Exception):
+    """Não há pagamento pra mudar de data."""
+
+
+async def corrigir_data_pagamento(
+    sessao: AsyncSession, parcela_id: uuid.UUID, novo_dia: date
+) -> Parcela:
+    """Muda o dia em que o pagamento desta parcela entrou no caixa.
+
+    Pro lançamento feito no dia errado — recebeu sábado, lançou segunda. Mexe
+    no **pagamento**, não só no rótulo da parcela: é o `pago_em` de cada
+    lançamento que o financeiro usa pra dizer em que dia o dinheiro entrou.
+    Trocar só a data da parcela mudaria o que a tela mostra e deixaria o
+    dinheiro no dia antigo — o pior dos dois mundos, porque parece resolvido.
+
+    Move o pagamento que **quitou** a parcela. Quando ela foi paga em pedaços
+    em dias diferentes, os pedaços anteriores ficam onde estão: eles
+    aconteceram naqueles dias, e empurrar todos pro mesmo dia apagaria isso.
+    """
+    parcela = await sessao.get(Parcela, parcela_id)
+    if parcela is None:
+        raise ParcelaInexistente()
+
+    recebimentos = [p for p in parcela.pagamentos if p.valor_centavos > 0]
+    if not recebimentos or parcela.pago_em is None:
+        raise ParcelaNaoPaga()
+
+    momento = _momento_do_pagamento(novo_dia)
+    _nao_antes_da_venda(parcela, momento)
+
+    ultimo = max(recebimentos, key=lambda p: p.pago_em)
+    ultimo.pago_em = momento
+    parcela.pago_em = momento
+    await sessao.flush()
+    return parcela

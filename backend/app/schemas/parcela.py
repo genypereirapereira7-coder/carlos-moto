@@ -61,3 +61,9 @@ class PagamentoEntrada(BaseModel):
     # conferido no serviço, que é quem sabe quanto ainda falta.
     valor_centavos: int = Field(gt=0)
     data_pagamento: Annotated[date, AfterValidator(validar_nao_no_futuro)] | None = None
+
+
+class CorrigirDataEntrada(BaseModel):
+    """O dia certo em que o cliente pagou — pro lançamento feito no dia errado."""
+
+    data_pagamento: Annotated[date, AfterValidator(validar_nao_no_futuro)]

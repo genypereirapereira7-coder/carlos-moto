@@ -34,6 +34,7 @@ class Evento(str, enum.Enum):
     VENDA_REGISTRADA = "venda.registrada"
     CLIENTE_CADASTRADO = "cliente.cadastrado"
     PARCELA_ATUALIZADA = "parcela.atualizada"
+    CAIXA_LANCADO = "caixa.lancado"
     USUARIO_PENDENTE = "usuario.pendente"
     USUARIO_DESATIVADO = "usuario.desativado"
 
@@ -52,6 +53,8 @@ DESTINOS: dict[Evento, tuple[Papel, ...]] = {
     Evento.DESPESA_LANCADA: (Papel.DONO,),
     Evento.CLIENTE_CADASTRADO: (Papel.DONO,),
     Evento.PARCELA_ATUALIZADA: (Papel.DONO,),
+    # Caixa é assunto do dono — o vendedor não vê o dinheiro da loja.
+    Evento.CAIXA_LANCADO: (Papel.DONO,),
     # Alguém pediu conta. Só o dono libera, então só o dono ouve — na hora: um
     # vendedor parado esperando pra começar é a diferença entre um toque agora
     # e um telefonema.

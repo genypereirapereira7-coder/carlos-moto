@@ -9,7 +9,7 @@ from app.models.cliente import Cliente
 from app.models.moto import Moto
 from app.models.parcela import Parcela
 from app.models.venda import Venda
-from app.schemas.parcela import MarcarPagaEntrada, PagamentoEntrada, ParcelaComCliente
+from app.schemas.parcela import CorrigirDataEntrada, MarcarPagaEntrada, PagamentoEntrada, ParcelaComCliente
 from app.servicos import parcelas as servico
 from app.servicos.eventos import Evento, publicar_apos_commit
 
@@ -51,6 +51,39 @@ async def marcar(parcela_id: uuid.UUID, dados: MarcarPagaEntrada, sessao: Sessao
         parcela = await servico.marcar(sessao, parcela_id, dados.pago, dados.data_pagamento)
     except servico.ParcelaInexistente as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcela não existe") from erro
+    except servico.PagamentoAntesDaVenda as erro:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "A data do pagamento não pode ser antes da data da venda",
+        ) from erro
+
+    venda = parcela.venda
+    saida = _saida(parcela, venda, venda.cliente, venda.moto)
+    await publicar_apos_commit(sessao, Evento.PARCELA_ATUALIZADA, saida.model_dump(mode="json"))
+    return saida
+
+
+@rotas.patch("/{parcela_id}/data-pagamento", response_model=ParcelaComCliente)
+async def corrigir_data(
+    parcela_id: uuid.UUID,
+    dados: CorrigirDataEntrada,
+    sessao: SessaoDep,
+    _: SoDono,
+):
+    """Corrige o dia em que o pagamento entrou no caixa.
+
+    Pro recebimento lançado no dia errado. Move o dinheiro no financeiro, não
+    só a data que aparece na tela.
+    """
+    try:
+        parcela = await servico.corrigir_data_pagamento(sessao, parcela_id, dados.data_pagamento)
+    except servico.ParcelaInexistente as erro:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcela não existe") from erro
+    except servico.ParcelaNaoPaga as erro:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esta parcela ainda não foi paga — não há data pra corrigir",
+        ) from erro
     except servico.PagamentoAntesDaVenda as erro:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

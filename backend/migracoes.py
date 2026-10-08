@@ -106,6 +106,15 @@ async def aplicar(engine: AsyncEngine) -> list[str]:
                 await conexao.execute(text(f"ALTER TABLE cliente ADD COLUMN {coluna} {tipo}"))
                 feitas.append(f"cliente.{coluna} (e-mail e endereço)")
 
+        # Caixa: entrada e saída lançadas à mão. A tabela em si nasce do
+        # `create_all`; o que não nasce dele é coluna nova em tabela que já
+        # existe — e aqui não há nenhuma, então só o índice de data, que é por
+        # onde o fechamento do dia procura.
+        await conexao.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_movimento_caixa_ocorrido "
+            "ON movimento_caixa (ocorrido_em)"
+        ))
+
         # Venda desfeita (a moto volta pro estoque). Junto, o `unique` da
         # coluna `moto_id` vira índice parcial: uma venda ATIVA por moto, pra
         # a moto devolvida poder ser vendida de novo. No SQLite não dá pra
